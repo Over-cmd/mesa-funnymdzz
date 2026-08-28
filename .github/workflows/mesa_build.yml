@@ -19,25 +19,6 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🛠️ NUEVO PASO: Forzar compatibilidad e inicialización de hardware en arquitecturas Bifrost (Mali-G52)
-      - name: Patch PanVK Device for Bifrost Conformance Bypass
-        run: |
-          echo "-> Buscando el archivo de inicialización del dispositivo PanVK..."
-          PANVK_DEVICE=$(find src/ -name "panvk_device.c" | head -n 1)
-          
-          if [ -n "$PANVK_DEVICE" ] && [ -f "$PANVK_DEVICE" ]; then
-            echo "-> Aplicando bypass de conformidad de hardware en: $PANVK_DEVICE"
-            # Asegurar la remoción de retornos de carro de Windows si existen
-            sed -i 's/\r$//' "$PANVK_DEVICE"
-            
-            # Modificación en caliente: Fuerza al driver a ignorar las advertencias/bloqueos de conformidad de Khronos
-            # sustituyendo validaciones restrictivas por inicialización directa de la arquitectura de la GPU.
-            sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
-            echo "-> Parche de compatibilidad de hardware Bifrost inyectado con éxito."
-          else
-            echo "-> Archivo panvk_device.c no detectado, se omitirá el parche estricto del dispositivo."
-          fi
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -117,27 +98,31 @@ jobs:
         run: |
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
-          cp build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
           
-          echo "-> Inyectando manifiesto JSON ICD oficial de 64 bits (AArch64)..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          echo "-> Moviendo el driver con su nombre nativo Panfrost..."
+          cp build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_panfrost.so
+          
+          echo "-> Inyectando manifiesto JSON ICD original exacto de 64 bits (AArch64)..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
           {
               "ICD": {
-                  "api_version": "1.3.289",
-                  "library_path": "libvulkan_wrapper.so"
+                  "api_version": "1.4.352",
+                  "library_arch": "64",
+                  "library_path": "libvulkan_panfrost.so"
               },
-              "file_format_version": "1.0.0"
+              "file_format_version": "1.0.1"
           }
           EOF
           
-          echo "-> Inyectando manifiesto JSON ICD oficial de 32 bits (ARM)..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
+          echo "-> Inyectando manifiesto JSON ICD original de 32 bits (ARM)..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
           {
               "ICD": {
-                  "api_version": "1.3.289",
-                  "library_path": "libvulkan_wrapper.so"
+                  "api_version": "1.4.352",
+                  "library_arch": "32",
+                  "library_path": "libvulkan_panfrost.so"
               },
-              "file_format_version": "1.0.0"
+              "file_format_version": "1.0.1"
           }
           EOF
           
