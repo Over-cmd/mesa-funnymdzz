@@ -43,10 +43,11 @@ jobs:
           echo "-> Corrigiendo variables de cabecera heredadas en el build de lib..."
           sed -i 's/inc_panfrost_hw/inc_panfrost/g' src/panfrost/lib/meson.build 2>/dev/null || true
           
-          # 🟢 CORRECCIÓN LOGICIAL: Enlazar el compilador antiguo dentro de la macro compartida libpanfrost_shared
-          echo "-> Corrigiendo enlazador estático de Midgard hacia libpanfrost_shared..."
+          echo "-> Corrigiendo dependencias estáticas antiguas del compilador y enlazador..."
           sed -i 's/libpanfrost_midgard/libpanfrost_shared/g' src/panfrost/lib/meson.build 2>/dev/null || true
           sed -i 's/libpanfrost_compiler/libpanfrost_shared/g' src/panfrost/lib/meson.build 2>/dev/null || true
+          # 🟢 NUEVA CORRECCIÓN: Unificar la lógica antigua de Bifrost en libpanfrost_lib
+          sed -i 's/libpanfrost_bifrost/libpanfrost_lib/g' src/panfrost/lib/meson.build 2>/dev/null || true
           
           ls -la src/panfrost/midgard/meson.build
 
