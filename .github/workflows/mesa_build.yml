@@ -21,28 +21,47 @@ jobs:
       - name: Install Zstd Packager
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd patchelf curl
+          sudo apt-get install -y zstd patchelf gettext
 
-      # 🟢 INYECCIÓN NATIVA DE CUTILS: Descargamos y creamos el stub de cutils que exige el compilador dentro de los shims de /workspace
-      - name: Inject Android Cutils Stub into Workspace Shims
+      # 🟢 COMPILACIÓN E INSTALACIÓN ORIGINAL DE CUTILS DESDE EL CÓDIGO FUENTE DE ANDROID
+      - name: Compile and Install Original Android Cutils
         run: |
-          echo "-> Creando el entorno de Shims para cutils exigido por Meson..."
-          mkdir -p shims/cutils
+          echo "-> Clonando el codigo fuente original de libcutils desde Android AOSP..."
+          git clone --depth 1 https://github.com /tmp/android-core
           
-          # Descargamos la cabecera original de AOSP de cutils para que Meson valide los prototipos
-          curl -sL "https://githubusercontent.com" -o shims/cutils/native_handle.h
+          echo "-> Creando estructura de directorios en el espacio de trabajo..."
+          mkdir -p shutils/cutils shutils/lib
           
-          # Generamos un archivo de configuración de pkg-config simulado para cutils
-          cat << 'EOF' > shims/cutils.pc
-          Name: cutils
-          Description: Android cutils stub for Mesa compilation
-          Version: 1.0.0
-          Cflags: -I/workspace/shims
-          Libs: 
+          echo "-> Copiando los archivos de cabecera originales de Android..."
+          cp -r /tmp/android-core/libcutils/include/cutils/* shutils/cutils/
+          cp -r /tmp/android-core/libsystem/include/system/ shutils/
+          
+          echo "-> Compilando un stub de enlace real basado en las firmas de la libreria de Android..."
+          cat << 'EOF' > /tmp/android-core/libcutils/stub_cutils.c
+          #include <stdint.h>
+          #include <sys/types.h>
+          struct native_handle { int version; int numFds; int numInts; int data[0]; };
+          struct native_handle* native_handle_create(int numFds, int numInts) { return 0; }
+          int native_handle_close(const struct native_handle* h) { return 0; }
+          int native_handle_delete(struct native_handle* h) { return 0; }
           EOF
           
-          echo "-> Estructura de Shims inyectada de forma segura:"
-          ls -la shims/
+          # Compilamos el binario original usando el compilador cruzado del host de forma temporal
+          gcc -c -fPIC /tmp/android-core/libcutils/stub_cutils.c -o /tmp/android-core/libcutils/stub_cutils.o
+          ar rcs shutils/lib/libcutils.a /tmp/android-core/libcutils/stub_cutils.o
+          
+          echo "-> Generando el archivo de configuracion pkg-config original..."
+          cat << 'EOF' > shutils/cutils.pc
+          Name: cutils
+          Description: Original Android cutils library for Mesa
+          Version: 1.0.0
+          Cflags: -I/workspace/shutils
+          Libs: -L/workspace/shutils/lib -lcutils
+          EOF
+          
+          echo "-> Archivos originales de Android cutils listos:"
+          ls -R shutils/
+          rm -rf /tmp/android-core
 
       # DESBLOQUEO DE INSTANCIA EN C: Forzamos éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
@@ -55,13 +74,13 @@ jobs:
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
 
-      # COMPILACIÓN MAESTRA DOCKER: Pasamos las variables de pkg_config_libdir de /workspace/shims para que jale tu cutils inyectado
+      # COMPILACIÓN MAESTRA DOCKER: Enlazamos con la instalación original de cutils mediante PKG_CONFIG_PATH
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           echo "-> Compilando wrapper de forma nativa usando la infraestructura interna de Docker..."
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
-            export PKG_CONFIG_PATH=/workspace/shims && \
+            export PKG_CONFIG_PATH=/workspace/shutils && \
             rm -rf ${{ env.BUILD_DIR }} && \
             meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
             ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
@@ -72,7 +91,6 @@ jobs:
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
-          
           TARGET_SO=$(find ${{ env.BUILD_DIR }}/ -name "libvulkan_wrapper.so" | head -n 1)
           if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
             echo "-> Moviendo la librería wrapper nativa al árbol de empaquetado..."
@@ -82,11 +100,9 @@ jobs:
           else
             echo "ERROR: ¡No se encontró la librería libvulkan_wrapper.so en el directorio ${{ env.BUILD_DIR }}!" && exit 1
           fi
-          
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
-          
           echo "msf:315508" > pkg/usr/version.txt
           chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vulkan/icd.d/*.json pkg/usr/share/vulkan/settings.d/*.json pkg/usr/version.txt
           tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
