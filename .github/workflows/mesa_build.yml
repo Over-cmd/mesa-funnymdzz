@@ -37,6 +37,14 @@ jobs:
           cp -r tmp_gnav/src/panfrost/lib src/panfrost/ || cp -r tmp_gamenative/src/panfrost/lib src/panfrost/
           rm -rf tmp_gamenative tmp_gnav 2>/dev/null || true
           
+          # 🟢 CORRECCIÓN DE RUTA BIFROST: Reubicar archivos dentro de la subcarpeta que exige Meson
+          echo "-> Estructurando subcarpeta compiler/bifrost..."
+          if [ -d "src/panfrost/compiler" ] && [ ! -d "src/panfrost/compiler/bifrost" ]; then
+            mkdir -p src/panfrost/compiler/bifrost_tmp
+            mv src/panfrost/compiler/* src/panfrost/compiler/bifrost_tmp/ 2>/dev/null || true
+            mv src/panfrost/compiler/bifrost_tmp src/panfrost/compiler/bifrost
+          fi
+          
           echo "-> Registrando subdirectorio en src/panfrost/meson.build..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           
@@ -47,8 +55,6 @@ jobs:
           find src/panfrost/ -name "meson.build" -exec sed -i 's/libpanfrost_midgard/libpanfrost_shared/g' {} + 2>/dev/null || true
           find src/panfrost/ -name "meson.build" -exec sed -i 's/libpanfrost_compiler/libpanfrost_shared/g' {} + 2>/dev/null || true
           find src/panfrost/ -name "meson.build" -exec sed -i 's/libpanfrost_bifrost/libpanfrost_lib/g' {} + 2>/dev/null || true
-          
-          # 🟢 NUEVA CORRECCIÓN: Forzar el enlazado utilitario antiguo hacia las librerías compartidas modernas
           find src/panfrost/ -name "meson.build" -exec sed -i 's/libpanfrost_util/libpanfrost_lib/g' {} + 2>/dev/null || true
           
           ls -la src/panfrost/midgard/meson.build
