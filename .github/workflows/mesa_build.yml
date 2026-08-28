@@ -86,7 +86,7 @@ jobs:
           echo "-> Inicializando empaquetado estructural solicitado (usr/lib y usr/share)..."
           rm -rf pkg
           
-          # Estructura raíz: usr/lib y usr/share/vulkan/icd.d
+          # Estructura raíz nativa solicitada
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
@@ -105,15 +105,25 @@ jobs:
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
           
-          echo "-> Vinculando y renombrando el manifiesto ICD solicitado..."
+          echo "-> Procesando y reescribiendo de forma segura el manifiesto ICD..."
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
-            # Corregido: Ahora se renombra exactamente a libvulkan_panfrost_kbase.aarch64.json
-            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+            # Copiamos el JSON con el nuevo nombre exacto solicitado
+            ORIG_JSON="build/src/panfrost/vulkan/panfrost_icd.aarch64.json"
+            DEST_JSON="pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json"
             
-            # Modificación de la ruta interna del JSON para apuntar al binario
-            sed -i 's|"library_path":.*|"library_path": "usr/lib/libvulkan_panfrost_kbase.so"|g' pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+            # Usamos Python nativo para prevenir errores estructurales o de codificación en el JSON
+            python3 -c '
+import json
+with open("'"$ORIG_JSON"'", "r", encoding="utf-8") as f:
+    data = json.load(f)
+data["ICD"]["library_path"] = "usr/lib/libvulkan_panfrost_kbase.so"
+with open("'"$DEST_JSON"'", "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=4)
+'
+            echo "-> JSON modificado con éxito usando Python. Validando estructura generada:"
+            cat "$DEST_JSON"
           else
-            echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
+            echo "ERROR: ¡No se encontró el manifiesto original panfrost_icd.aarch64.json!" && exit 1
           fi
           
           echo "-> Creando archivo meta.json en la raíz del paquete..."
