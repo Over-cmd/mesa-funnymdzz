@@ -3,7 +3,6 @@ ndk_home = '$ANDROID_NDK_HOME'
 working_dir = '$MESON_WORKING_DIR'
 ndk_bin = ndk_home / 'toolchains/llvm/prebuilt/linux-x86_64/bin'
 ndk_sysroot = ndk_home / 'toolchains/llvm/prebuilt/linux-x86_64/sysroot'
-clang_ver = '$CLANG_VERSION'
 
 [binaries]
 c = [ndk_bin / 'aarch64-linux-android30-clang', '-D__TERMUX__']
@@ -42,9 +41,7 @@ cpp_args = ['--sysroot=' + ndk_sysroot,
             '-D_LIBCPP_ABI_NAMESPACE=__1']
 c_link_args = ['--sysroot=' + ndk_sysroot, '-Wl,--allow-shlib-undefined',
                 '-L' + working_dir / 'shims',
-                '-L' + ndk_home / 'toolchains/llvm/prebuilt/linux-x86_64/lib/clang' / clang_ver / 'lib/linux/aarch64',
                 '-llog', '-lsync']
 cpp_link_args = ['--sysroot=' + ndk_sysroot, '-Wl,--allow-shlib-undefined',
                 '-L' + working_dir / 'shims',
-                '-L' + ndk_home / 'toolchains/llvm/prebuilt/linux-x86_64/lib/clang' / clang_ver / 'lib/linux/aarch64',
                 '-llog', '-lsync']
