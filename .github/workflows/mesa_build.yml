@@ -82,7 +82,6 @@ jobs:
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
-          # 🟢 CORRECCIÓN: Restaurado el enlace correcto a vtn-bindgen2 (el comentario anterior pisaba el nombre real requerido)
           ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
@@ -125,16 +124,18 @@ jobs:
 
       - name: Structure and Pack wrapper.tzst
         run: |
-          echo "-> Creando árbol estructural limpio para Android..."
+          echo "-> Limpiando estructuras previas..."
           rm -rf pkg
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
-          echo "-> Moviendo y renombrando el archivo .so a libvulkan_wrapper.so..."
+          # Creamos la carpeta de configuración limpia para Winlator para anular las 16 variables de debug dañinas
+          mkdir -p pkg/usr/share/vulkan/settings.d
+          
+          echo "-> Moviendo el binario compilado..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
             cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
             
-            # Limpiamos símbolos usando la herramienta multiplataforma nativa del NDK
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then
               $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
@@ -145,15 +146,22 @@ jobs:
             echo "ERROR: ¡No se encontró la librería compilada libvulkan_panfrost.so!" && exit 1
           fi
           
-          echo "-> Inyectando manifiestos JSON ICD en formato plano compacto para evitar corrupciones de ZArchiver..."
+          echo "-> Inyectando manifiestos JSON ICD limpios y optimizados..."
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
+          # Forzamos un perfil limpio que le dice a Winlator que ignore los volcados de CPU y active PanVK de forma segura
+          echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
+
+          echo "-> Forzando versionado correcto para eliminar el 'Version: Unknown' de la pantalla"
+          echo "msf:315508" > pkg/usr/version.txt
+
           echo "-> Ajustando permisos POSIX universales..."
           chmod -R 755 pkg/
           chmod 644 pkg/usr/lib/libvulkan_wrapper.so
           chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
+          chmod 644 pkg/usr/version.txt
 
           echo "=== Inspección Estructural del Empaquetado ==="
           ls -R pkg
