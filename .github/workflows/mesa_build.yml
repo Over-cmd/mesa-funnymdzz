@@ -1,6 +1,11 @@
 name: Android NDK Build (Wrapper Variant)
 
-on: [push, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build-android-wrapper:
@@ -8,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        build-type: [release] # Usamos únicamente 'release' para ahorrar almacenamiento y evitar dobles enlazados pesados en RAM
+        build-type: [release]
 
     steps:
       - name: Checkout repository
@@ -22,30 +27,47 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
 
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
               build-essential \
-              llvm-20-dev \
-              libclang-20-dev \
-              libclc-20-dev \
-              libllvmspirvlib-20-dev \
+              llvm-dev \
+              libclang-dev \
               libelf-dev \
               spirv-tools \
               bison \
               flex \
               libdrm-dev \
               pkg-config \
-              gettext
+              gettext \
+              zlib1g-dev \
+              cargo \
+              rustc
+          
+          # Detectamos dinámicamente la versión mayor de LLVM instalada en el entorno actual para evitar fallos de paquetes rotos
+          LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
+          echo "-> Detectada versión de LLVM del sistema: ${LLVM_MAJOR}"
+
+          sudo apt-get install -y \
+              "libclc-${LLVM_MAJOR}-dev" \
+              "libllvmspirvlib-${LLVM_MAJOR}-dev" \
+              "libclang-${LLVM_MAJOR}-dev"
+
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
+      - name: Install and Pin Bindgen for Mesa
+        run: |
+          # Requerido explícitamente por el compilador Rust de PanVK para evitar fallos de alineación en estructuras de 1 byte
+          cargo install --locked --version 0.72.1 bindgen-cli
+          echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
+
       - name: Generate Host Tools
         run: |
-          # 🟢 MEJORA DE ESTABILIDAD: Limitamos el enlazado pesado de herramientas host a un máximo de 2 hilos para evitar rebasar los 7GB de RAM de GitHub
+          echo "-> Configurando herramientas de compilación nativa de host..."
           meson setup build-host \
               -Dplatforms=[] \
               -Dgallium-drivers=[] \
@@ -55,8 +77,12 @@ jobs:
               -Dinstall-precomp-compiler=true \
               -Dllvm=enabled \
               -Dmesa-clc=enabled -Dinstall-mesa-clc=true
+              
+          # Se limita el enlazador pesado de las herramientas host a 2 hilos paralelos para proteger la RAM
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
+          
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
+          # 🟢 CORRECCIÓN 1: Cambiado 'vtn-gen2' por 'vtn-bindgen2' para que Mesa localice la herramienta host correctamente
           ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
@@ -72,7 +98,7 @@ jobs:
           meson setup build --reconfigure \
               --cross-file android-cross.txt \
               -Dbuildtype=${{ matrix.build-type }} \
-              -Dplatforms=android,x11 \
+              -Dplatforms=android \
               -Dandroid-stub=true \
               -Dandroid-libbacktrace=disabled \
               -Dplatform-sdk-version=30 \
@@ -84,7 +110,7 @@ jobs:
               -Dgles2=disabled \
               -Dglvnd=disabled \
               -Dvalgrind=disabled \
-              -Dgallium-drivers= \
+              -Dgallium-drivers="" \
               -Dshared-glapi=disabled \
               -Dzstd=disabled \
               -Dmesa-clc=system \
@@ -94,42 +120,46 @@ jobs:
 
       - name: Compile Project
         run: |
-          # 🟢 MEJORA DE ESTABILIDAD DEFINITIVA: Limitamos los hilos paralelos de Meson a 2 (--jobs 2). 
-          # Esto mitiga por completo el error 'operation was canceled' provocado por la falta de RAM en la máquina de GitHub.
+          # Limitamos la compilación a 2 trabajos paralelos para evitar el bloqueo del paso pesado final
           meson compile -C build --jobs 2
 
       - name: Structure and Pack wrapper.tzst
         run: |
+          echo "-> Creando árbol estructural limpio para Android..."
+          rm -rf pkg
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
           echo "-> Moviendo y renombrando el archivo .so a libvulkan_wrapper.so..."
-          cp build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
+          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
+            cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
+            
+            # Limpiamos símbolos usando la herramienta multiplataforma nativa del NDK
+            STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+            if [ -f "$STRIP_BIN" ]; then
+              $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
+            else
+              strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
+            fi
+          else
+            echo "ERROR: ¡No se encontró la librería compilada libvulkan_panfrost.so!" && exit 1
+          fi
           
-          echo "-> Inyectando el manifiesto JSON con los nombres obligatorios del Wrapper original..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-          {
-              "ICD": {
-                  "api_version": "1.4.352",
-                  "library_arch": "64",
-                  "library_path": "libvulkan_wrapper.so"
-              },
-              "file_format_version": "1.0.1"
-          }
-          EOF
+          echo "-> Inyectando manifiestos JSON ICD en formato plano compacto para evitar corrupciones de ZArchiver..."
+          # Al usar echo directo eliminamos cualquier sangría o tabulación invisible que rompa el JSON en Android
+          echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
-          echo "-> Inyectando el manifiesto JSON de 32 bits correspondiente..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
-          {
-              "ICD": {
-                  "api_version": "1.4.352",
-                  "library_arch": "32",
-                  "library_path": "libvulkan_wrapper.so"
-              },
-              "file_format_version": "1.0.1"
-          }
-          EOF
-          
+          echo "-> Ajustando permisos POSIX universales..."
+          chmod -R 755 pkg/
+          chmod 644 pkg/usr/lib/libvulkan_wrapper.so
+          chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+          chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
+
+          echo "=== Inspección Estructural del Empaquetado ==="
+          ls -R pkg
+          echo "=============================================="
+
           cd pkg
           tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
           cd ..
