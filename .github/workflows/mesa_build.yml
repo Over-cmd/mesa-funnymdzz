@@ -28,7 +28,6 @@ jobs:
       - name: Inject Bifrost Ecosystem Folders
         run: |
           echo "-> Limpiando directorios específicos e inyectando soporte..."
-          # 🟢 CORRECCIÓN: NO borramos la carpeta compiler completa para no perder valhall
           rm -rf src/panfrost/midgard src/panfrost/include src/panfrost/lib
           
           echo "-> Copiando librerías y cabeceras base de Bifrost..."
@@ -36,11 +35,9 @@ jobs:
           cp -r tmp_gamenative/src/panfrost/include src/panfrost/ 2>/dev/null || true
           cp -r tmp_gamenative/src/panfrost/lib src/panfrost/ 2>/dev/null || true
           
-          echo "-> Fusionando la carpeta de sombreadores de tu Mali-G52 dentro del compilador..."
+          echo "-> Fusionando la carpeta de sombreadores de tu Mali-G52..."
           mkdir -p src/panfrost/compiler/bifrost
-          # Copiamos todo el contenido antiguo dentro de la subcarpeta bifrost sin pisar valhall
           cp -r tmp_gamenative/src/panfrost/compiler/* src/panfrost/compiler/bifrost/ 2>/dev/null || true
-          
           rm -rf tmp_gamenative
           
           echo "-> Registrando subdirectorio midgard en src/panfrost/meson.build..."
@@ -54,10 +51,6 @@ jobs:
           find src/panfrost/ -name "meson.build" -exec sed -i 's/libpanfrost_compiler/libpanfrost_shared/g' {} + 2>/dev/null || true
           find src/panfrost/ -name "meson.build" -exec sed -i 's/libpanfrost_bifrost/libpanfrost_lib/g' {} + 2>/dev/null || true
           find src/panfrost/ -name "meson.build" -exec sed -i 's/libpanfrost_util/libpanfrost_lib/g' {} + 2>/dev/null || true
-          
-          echo "-> Verificando que ambas arquitecturas coexistan en el servidor:"
-          ls -ld src/panfrost/compiler/valhall
-          ls -ld src/panfrost/compiler/bifrost
 
       - name: Redirect Panfrost Build Logic to Wrapper Identity natively
         run: |
