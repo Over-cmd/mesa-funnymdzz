@@ -24,35 +24,20 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 CORRECCIÓN CRÍTICA DE INSTANCIA: Forzar éxito en vkCreateInstance para evitar caídas en Mali-G52
+      # 🛠️ CORRECCIÓN DE INSTANCIA: Forzar éxito continuo en el punto de entrada de PanVK para Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           echo "-> Localizando el archivo del dispositivo PanVK..."
           PANVK_DEVICE=$(find src/ -name "panvk_device.c" | head -n 1)
-          
           if [ -n "$PANVK_DEVICE" ] && [ -f "$PANVK_DEVICE" ]; then
             echo "-> Aplicando bypass de inicialización de instancia en: $PANVK_DEVICE"
             sed -i 's/\r$//' "$PANVK_DEVICE"
-            
-            # Fuerza a la función de validación de extensiones a devolver éxito continuo
             sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
-            
-            # Rompe cualquier aborto controlado de Khronos obligando al punto de retorno a validar la inicialización física de la GPU
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
-            echo "-> Parche de vkCreateInstance inyectado con éxito."
+            echo "-> Parche de vkCreateInstance inyectado."
           fi
 
-      # SUSTITUCIÓN NATIVA PANVK/PANFROST: Forzar la identidad 'wrapper' en las entrañas del driver Vulkan
-      - name: Native Driver Rename from Panfrost to Wrapper
-        run: |
-          echo "-> Redireccionando las firmas internas de PanVK de panfrost a wrapper..."
-          find src/panfrost/vulkan/ -type f -name "*.c" -exec sed -i 's/"panfrost"/"wrapper"/g' {} + 2>/dev/null || true
-          
-          echo "-> Forzando a Meson a compilar el binario con identidad Wrapper sin corromper la sintaxis..."
-          sed -i "s/output : 'libvulkan_panfrost'/output : 'libvulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
-          sed -i "s/name_prefix : 'libvulkan_'/name_prefix : 'libvulkan_'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
-          sed -i "s/'vulkan_panfrost'/'vulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
-
+       Tarjeta de video / Procesador: Instalar Python y dependencias
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -74,7 +59,8 @@ jobs:
               gettext \
               zlib1g-dev \
               cargo \
-              rustc
+              rustc \
+              patchelf # 🟢 NUEVA HERRAMIENTA: Para renombrar las firmas del binario externamente
           
           LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
           sudo apt-get install -y "libclc-${LLVM_MAJOR}-dev" "libllvmspirvlib-${LLVM_MAJOR}-dev" "libclang-${LLVM_MAJOR}-dev"
@@ -104,6 +90,7 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
+          # 🟢 VOLVEMOS A PANFROST NATIVO: Compila el driver de forma limpia para evitar romper las firmas ELF de Khronos
           meson setup build --reconfigure \
               --cross-file android-cross.txt \
               -Dbuildtype=${{ matrix.build-type }} \
@@ -125,13 +112,17 @@ jobs:
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
-          TARGET_SO=$(find build/ -name "libvulkan_wrapper.so" | head -n 1)
-          if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
-            cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
+          echo "-> Extrayendo el driver nativo de Panfrost..."
+          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
+            cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
+            
+            # 🟢 REDIRECCIÓN BINARIA QUIRÚRGICA: Cambiamos el SONAME interno del ELF a libvulkan_wrapper.so sin romper la tabla de funciones
+            patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
+            
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; else strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; fi
           else
-            echo "ERROR: ¡No se encontró libvulkan_wrapper.so!" && exit 1
+            echo "ERROR: ¡No se encontró libvulkan_panfrost.so!" && exit 1
           fi
           
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
