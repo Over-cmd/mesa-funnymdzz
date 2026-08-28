@@ -24,6 +24,27 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
+      # 🟢 PARCHE DE HARDWARE: Forzar al código C de PanVK a aceptar e inicializar la arquitectura Bifrost (Mali-G52)
+      - name: Patch PanVK Source Code for Bifrost Force Activation
+        run: |
+          echo "-> Buscando el archivo de inicialización del dispositivo PanVK..."
+          PANVK_DEVICE=$(find src/ -name "panvk_device.c" | head -n 1)
+          
+          if [ -n "$PANVK_DEVICE" ] && [ -f "$PANVK_DEVICE" ]; then
+            echo "-> Rompiendo el bloqueo de conformidad de hardware en: $PANVK_DEVICE"
+            sed -i 's/\r$//' "$PANVK_DEVICE"
+            # Reemplaza la verificación de extensiones restrictiva por un valor verdadero continuo
+            sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
+            echo "-> Parche de código de hardware inyectado."
+          else
+            echo "-> ATENCIÓN: No se encontró panvk_device.c, buscando alternativas en panvk_vulkan.c..."
+            PANVK_VULKAN=$(find src/ -name "panvk_vulkan.c" | head -n 1)
+            if [ -n "$PANVK_VULKAN" ] && [ -f "$PANVK_VULKAN" ]; then
+              sed -i 's/\r$//' "$PANVK_VULKAN"
+              sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_VULKAN" 2>/dev/null || true
+            fi
+          fi
+
       # SUSTITUCIÓN NATIVA DEL DRIVER: Cambia el nombre de compilación interno de Panfrost a Wrapper
       - name: Native Driver Rename from Panfrost to Wrapper
         run: |
@@ -55,7 +76,6 @@ jobs:
               cargo \
               rustc
           
-          # Detectamos dinámicamente la versión mayor de LLVM instalada en el entorno actual para evitar fallos de paquetes rotos
           LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
           echo "-> Detectada versión de LLVM del sistema: ${LLVM_MAJOR}"
 
@@ -69,7 +89,6 @@ jobs:
 
       - name: Install and Pin Bindgen for Mesa
         run: |
-          # Requerido explícitamente por el compilador Rust de PanVK para evitar fallos de alineación en estructuras de 1 byte
           cargo install --locked --version 0.72.1 bindgen-cli
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
 
@@ -86,7 +105,6 @@ jobs:
               -Dllvm=enabled \
               -Dmesa-clc=enabled -Dinstall-mesa-clc=true
               
-          # Se limita el enlazador pesado de las herramientas host a 2 hilos paralelos para proteger la RAM
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
@@ -127,7 +145,6 @@ jobs:
 
       - name: Compile Project
         run: |
-          # Limitamos la compilación a 2 trabajos paralelos para evitar el bloqueo del paso pesado final
           meson compile -C build --jobs 2
 
       - name: Structure and Pack wrapper.tzst
@@ -139,7 +156,6 @@ jobs:
           mkdir -p pkg/usr/share/vulkan/settings.d
           
           echo "-> Moviendo el binario generado de forma nativa..."
-          # Buscamos el archivo bajo el nuevo nombre nativo que forzamos en el código fuente
           TARGET_SO=$(find build/ -name "libvulkan_wrapper.so" | head -n 1)
           if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
             cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
@@ -158,24 +174,16 @@ jobs:
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
-          # Forzamos un perfil limpio que le dice a Winlator que ignore los volcados de CPU y active PanVK de forma segura
           echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
 
-          echo "-> Forzando versionado correcto para eliminar el 'Version: Unknown' de la pantalla"
           echo "msf:315508" > pkg/usr/version.txt
 
-          echo "-> Ajustando permisos POSIX universales..."
           chmod -R 755 pkg/
           chmod 644 pkg/usr/lib/libvulkan_wrapper.so
           chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           chmod 644 pkg/usr/version.txt
 
-          echo "=== Inspección Estructural del Empaquetado ==="
-          ls -R pkg
-          echo "=============================================="
-
-          echo "-> Comprimiendo la estructura dual ingresando de forma nativa con el flag -C..."
           tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
 
       - name: Upload Final wrapper.tzst
