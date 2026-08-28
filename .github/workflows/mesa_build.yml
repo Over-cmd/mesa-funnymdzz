@@ -1,37 +1,33 @@
-name: Termux-Build of Mesa Vulkan Wrapper
+name: Android NDK Build (Bifrost Automated Injected Variant)
 on:
   push:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  build-aarch64-wrapper:
+  build-android-wrapper:
     runs-on: ubuntu-latest
-    env:
-      BUILD_DIR: build
-      IMAGE_TAG: ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest
+    strategy:
+      matrix:
+        build-type: [release]
     steps:
-      - name: Checkout Code
+      - name: Checkout repository actual (mesa-funnymdzz)
         uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Install Zstd Packager
+      - name: Patch anon_file.c for memfd_create
         run: |
-          sudo apt-get update
-          sudo apt-get install -y zstd patchelf
-      - name: Register Wrapper as a Valid Vulkan Driver in Mesa Options
+          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+      - name: Automate Sparse Checkout for Midgard Folder
         run: |
-          echo "-> Registrando wrapper en meson_options.txt..."
-          sed -i "s/choices : \['auto', 'amd', 'broadcom', 'freedreno', 'intel', 'intel_hasvk', 'panfrost'/choices : \['auto', 'amd', 'broadcom', 'freedreno', 'intel', 'intel_hasvk', 'wrapper', 'panfrost'/g" meson_options.txt 2>/dev/null || true
-          echo "-> Redireccionando la logica de compilacion hacia wrapper..."
-          sed -i "s/when : 'with_vulkan_icd_panfrost'/when : 'with_vulkan_icd_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
-          sed -i "s/with_vulkan_icd_panfrost =/with_vulkan_icd_wrapper =/g" meson.build 2>/dev/null || true
-          sed -i "s/'panfrost' in vulkan_drivers/'wrapper' in vulkan_drivers/g" meson.build 2>/dev/null || true
-          sed -i "s/output : 'libvulkan_panfrost'/output : 'libvulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
-          sed -i "s/name_prefix : 'libvulkan_'/name_prefix : 'libvulkan_'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
-          sed -i "s/'vulkan_panfrost'/'vulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
-          find src/panfrost/vulkan/ -type f -name "*.c" -exec sed -i 's/"panfrost"/"wrapper"/g' {} + 2>/dev/null || true
+          echo "-> Realizando clonación selectiva de la carpeta de hardware..."
+          rm -rf src/panfrost/midgard
+          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
+          cd /tmp/gamenative-src
+          git sparse-checkout set src/panfrost/midgard
+          cd $GITHUB_WORKSPACE
+          cp -r /tmp/gamenative-src/src/panfrost/midgard src/panfrost/
+          rm -rf /tmp/gamenative-src
+          sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
+          ls -la src/panfrost/midgard/meson.build
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           PANVK_DEVICE=$(find src/ -name "*device.c" | head -n 1)
@@ -40,22 +36,53 @@ jobs:
             sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
-      - name: Run Wrapper Compiler via Native Docker Container
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Build Dependencies
         run: |
-          echo "-> Compilando con -Dvulkan-drivers=wrapper mediante Docker..."
-          # El contenedor de leegao ejecutara la compilacion inyectando las flags modificadas de forma transparente
-          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
+          sudo apt-get update
+          sudo apt-get install -y build-essential llvm-dev libclang-dev libelf-dev spirv-tools bison flex libdrm-dev pkg-config gettext zlib1g-dev cargo rustc patchelf
+          LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
+          sudo apt-get install -y "libclc-${LLVM_MAJOR}-dev" "libllvmspirvlib-${LLVM_MAJOR}-dev" "libclang-${LLVM_MAJOR}-dev"
+          python -m pip install --upgrade pip
+          pip install mako PyYAML meson ninja packaging
+      - name: Install and Pin Bindgen for Mesa
+        run: |
+          cargo install --locked --version 0.72.1 bindgen-cli
+          echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
+      - name: Generate Host Tools
+        run: |
+          meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
+          ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
+          ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
+          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
+      - name: Configure Meson
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
+          envsubst < android.toml > android-cross.txt
+          meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers="" -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=panfrost -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
+      - name: Compile Project
+        run: |
+          meson compile -C build --jobs 2
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
-          TARGET_SO=$(find ${{ env.BUILD_DIR }}/ -name "libvulkan_wrapper.so" -o -name "libvulkan_panfrost.so" | head -n 1)
+          TARGET_SO=$(find build/ -name "libvulkan_panfrost.so" | head -n 1)
           if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
             cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; else strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; fi
           else
-            echo "ERROR: ¡No se encontro la libreria compilada en el directorio de salida de Docker!" && exit 1
+            echo "ERROR: ¡No se encontró la librería libvulkan_panfrost.so generada!" && exit 1
           fi
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
@@ -66,6 +93,6 @@ jobs:
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
         with:
-          name: Mesa-Wrapper-Zstd
+          name: Mesa-Wrapper-Zstd-${{ matrix.build-type }}
           path: wrapper.tzst
           if-no-files-found: error
