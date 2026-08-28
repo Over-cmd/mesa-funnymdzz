@@ -24,21 +24,21 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 PASO DE INYECCIÓN DE HARDWARE: Descargamos y soldamos la carpeta Midgard/Bifrost que te faltaba
-      - name: Inject Midgard Compiler from Alternative Repository
+      # 🟢 CORRECCIÓN ULTRA-RÁPIDA: Descarga directa de la carpeta midgard usando la API de archivos de GitHub
+      - name: Inject Midgard Compiler via Direct Tarball
         run: |
-          echo "-> Clonando temporalmente el repositorio con soporte Midgard/Bifrost..."
-          git clone --depth 1 --branch wrapper-25 https://github.com /tmp/gamenative
+          echo "-> Descargando exclusivamente el compilador Midgard/Bifrost faltante..."
+          mkdir -p src/panfrost/midgard
           
-          echo "-> Inyectando la carpeta midgard en el árbol de fuentes actual..."
-          cp -r /tmp/gamenative/src/panfrost/midgard src/panfrost/
+          # Descargamos el árbol de la rama wrapper-25 en un archivo tar y extraemos únicamente la carpeta src/panfrost/midgard
+          curl -sL https://github.com | \
+          tar -xzf - --strip-components=3 --wildcards "*/src/panfrost/midgard/*" -C src/panfrost/midgard
           
-          echo "-> Modificando src/panfrost/meson.build para forzar la compilación del compilador Midgard..."
-          # Buscamos la sección de subdirectorios de panfrost e inyectamos 'midgard' si no está presente
+          echo "-> Modificando src/panfrost/meson.build para registrar la subcarpeta inyectada..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           
-          echo "-> Verificando inyección estructural:"
-          ls -d src/panfrost/midgard
+          echo "-> Verificando estructura inyectada con éxito:"
+          ls -la src/panfrost/midgard/meson.build
 
       # 🛠️ DESBLOQUEO DE INSTANCIA: Parcheamos PanVK para forzar éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
@@ -52,6 +52,7 @@ jobs:
             echo "-> Parche de vkCreateInstance inyectado."
           fi
 
+       Tarjeta de video / Procesador: Instalar Python y dependencias
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
