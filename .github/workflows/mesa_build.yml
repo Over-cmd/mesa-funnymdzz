@@ -24,29 +24,17 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 CORRECCIÓN CRÍTICA DE RED: Inyección automatizada del compilador Midgard/Bifrost usando URLs funcionales reales
+      # 🟢 INYECCIÓN DE HARDWARE REAL: Extrae de forma limpia la carpeta midgard desde la rama wrapper-25
       - name: Inject Midgard Compiler via Direct GitHub Tarball
         run: |
-          echo "-> Descargando el compilador Midgard/Bifrost desde el repositorio estable..."
+          echo "-> Descargando exclusivamente el compilador Midgard/Bifrost faltante..."
           mkdir -p src/panfrost/midgard
           
-          # Descarga directa del tarball de la rama del proyecto usando la URL de descarga real de servidores de GitHub
+          # Descargamos el tarball real estructurado del repositorio puente y extraemos únicamente la subcarpeta midgard
           curl -sL "https://github.com" | \
-          tar -xzf - --strip-components=3 "mesa-main/src/panfrost/midgard" -C src/panfrost/midgard || true
+          tar -xzf - --strip-components=3 "gamenative-wrapper-wrapper-25/src/panfrost/midgard" -C src/panfrost/midgard
           
-          echo "-> Verificando inyección primaria..."
-          if [ ! -f "src/panfrost/midgard/meson.build" ]; then
-            echo "-> Tarball primario no disponible por comodines. Aplicando fallback mediante clonación selectiva..."
-            rm -rf src/panfrost/midgard
-            
-            # Clonación de la estructura del espejo oficial de Mesa de forma selectiva para ahorrar espacio y RAM
-            git clone --depth 1 --sparse --filter=blob:none https://github.com mesa-temp
-            cd mesa-temp && git sparse-checkout set src/panfrost/midgard && cd ..
-            cp -r mesa-temp/src/panfrost/midgard src/panfrost/
-            rm -rf mesa-temp
-          fi
-          
-          echo "-> Modificando src/panfrost/meson.build para forzar la lectura del compilador Bifrost..."
+          echo "-> Modificando src/panfrost/meson.build para registrar la subcarpeta inyectada..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           
           echo "-> Verificando estructura inyectada con éxito:"
@@ -64,7 +52,6 @@ jobs:
             echo "-> Parche de vkCreateInstance inyectado."
           fi
 
-      # 🟢 CORRECCIÓN DE SINTAXIS: Se eliminó el texto en español suelto que rompía el parser de GitHub
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -105,7 +92,7 @@ jobs:
           meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
-          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-gen2"
+          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
