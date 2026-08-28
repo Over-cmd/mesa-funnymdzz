@@ -36,15 +36,13 @@ jobs:
           fi
 
           echo "-> Escribiendo manifiesto libvulkan_panfrost_kbase.aarch64.json..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
-{
-    "file_format_version": "1.0.0",
-    "ICD": {
-        "library_path": "usr/lib/libvulkan_panfrost_kbase.so",
-        "api_version": "1.1.0"
-    }
-}
-EOF
+          echo '{' > pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+          echo '    "file_format_version": "1.0.0",' >> pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+          echo '    "ICD": {' >> pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+          echo '        "library_path": "usr/lib/libvulkan_panfrost_kbase.so",' >> pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+          echo '        "api_version": "1.1.0"' >> pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+          echo '    }' >> pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+          echo '}' >> pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
 
           echo "-> Creando archivo meta.json para Bannerlator..."
           echo '{"name": "PanVK Panfrost Kbase Mod", "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver", "type": "graphics_driver", "version": "1.0.0", "author": "Mesa Community / Mod", "compatibility": {"min_bannerlator_version": "3.0"}}' > pkg/meta.json
