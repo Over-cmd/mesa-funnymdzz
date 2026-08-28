@@ -24,19 +24,19 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 CORRECCIÓN CRÍTICA DE RAMA: Forzar a Git a clonar selectivamente desde la rama wrapper-25 de tu repositorio estable
+      # Automate Sparse Checkout para inyectar dinámicamente el compilador de tu Mali-G52
       - name: Automate Sparse Checkout for Midgard Folder
         run: |
           echo "-> Realizando clonación selectiva de la carpeta de hardware faltante..."
           rm -rf src/panfrost/midgard
           
           # Clonamos de forma ultra-rápida especificando la rama real del fork donde reside Bifrost
-          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com/Over-cmd/gamenative-wrapper /tmp/gamenative-src
+          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
           cd /tmp/gamenative-src
           git sparse-checkout set src/panfrost/midgard
           cd $GITHUB_WORKSPACE
           
-          echo "-> Moviendo la carpeta de sombreadores de tu Mali-G52 al árbol de compilación actual..."
+          echo "-> Moviendo la carpeta de sombreadores al árbol de compilación actual..."
           cp -r /tmp/gamenative-src/src/panfrost/midgard src/panfrost/
           rm -rf /tmp/gamenative-src
           
@@ -46,7 +46,7 @@ jobs:
           echo "-> Verificando estructura inyectada con éxito en los servidores de GitHub:"
           ls -la src/panfrost/midgard/meson.build
 
-      # 🛠️ DESBLOQUEO DE INSTANCIA EN C: Parcheamos PanVK para forzar éxito en vkCreateInstance en tu Mali-G52
+      # DESBLOQUEO DE INSTANCIA EN C: Parcheamos PanVK para forzar éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           echo "-> Aplicando bypass de inicialización de instancia en código C..."
@@ -92,13 +92,14 @@ jobs:
           cargo install --locked --version 0.72.1 bindgen-cli
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
 
+      # Generar Herramientas del Host enlazando de forma estricta vtn-bindgen2
       - name: Generate Host Tools
         run: |
           echo "-> Compilando herramientas nativas de host..."
           meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
-          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-gen2"
+          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
@@ -127,14 +128,16 @@ jobs:
         run: |
           meson compile -C build --jobs 2
 
+      # EMPAQUETADO COMPATIBLE EN FORMATO WRAPPER PARA EL INSTALADOR DE WINLATOR
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
-          echo "-> Extrayendo el driver PanVK inyectado con soporte de sombreadores Bifrost..."
+          echo "-> Extrayendo el driver PanVK compilado..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
             cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
             
+            # Ajustamos la cabecera con patchelf para que el cargador mantenga estables los símbolos binarios
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
             
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
@@ -146,12 +149,14 @@ jobs:
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
+          # Inyección de las variables seguras que encienden PanVK sobre el kernel kbase de tu Mali-G52
           echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
 
           echo "msf:315508" > pkg/usr/version.txt
           chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vulkan/icd.d/*.json pkg/usr/share/vulkan/settings.d/*.json pkg/usr/version.txt
           tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
 
+      # Subida del artefacto final sin truncar
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
         with:
