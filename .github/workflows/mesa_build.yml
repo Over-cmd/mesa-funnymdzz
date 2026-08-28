@@ -117,9 +117,9 @@ jobs:
           echo "-> Compilando driver PanVK para Android ARM64..."
           meson compile -C build
 
-      - name: Structure and Pack wrapper.tzst for Bannerlator
+      - name: Stage runtime files
         run: |
-          echo "-> Inicializando empaquetado basado estrictamente en la salida original de Mesa..."
+          echo "-> Inicializando empaquetado estructural con nombres originales de Mesa..."
           rm -rf pkg
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
@@ -128,34 +128,33 @@ jobs:
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
             cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost.so
           else
-            echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so en las rutas de Mesa!" && exit 1
+            echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
 
           echo "-> Copiando el archivo original panfrost_icd.aarch64.json generado por Meson..."
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
             cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
           else
-            echo "ERROR: ¡No se encontró el manifiesto original panfrost_icd.aarch64.json en la salida de compilación!" && exit 1
+            echo "ERROR: ¡No se encontró el manifiesto original panfrost_icd.aarch64.json!" && exit 1
           fi
 
-          echo "-> Generando variante de 32 bits tomando como base el archivo JSON original..."
-          # Copia el original de 64 bits y sustituye la propiedad de arquitectura limpiamente
+          echo "-> Generando variante de 32 bits basada estrictamente en el JSON nativo..."
           cp pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
           sed -i 's/"64"/"32"/g' pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
           
-          echo "-> Ajustando permisos POSIX universales del sistema de archivos..."
+          echo "-> Asignando permisos POSIX para entornos en contenedores/Android..."
           chmod 755 pkg/usr pkg/usr/lib pkg/usr/share pkg/usr/share/vulkan pkg/usr/share/vulkan/icd.d
           chmod 644 pkg/usr/lib/libvulkan_panfrost.so
           chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
           chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
 
-          echo "=== Árbol Estructural del Paquete Nativo ==="
+          echo "=== Árbol Estructural Preparado ==="
           ls -R pkg
-          echo "=== Inspección del JSON Copiado ==="
-          cat pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
-          echo "=========================================="
-          
-          echo "-> Comprimiendo estructura limpia en wrapper.tzst..."
+          echo "===================================="
+
+      - name: Compress and Structure Package
+        run: |
+          echo "-> Comprimiendo la estructura dual en formato wrapper.tzst..."
           cd pkg
           tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
           cd ..
