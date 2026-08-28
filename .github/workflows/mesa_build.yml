@@ -40,6 +40,9 @@ jobs:
           cpu_family = 'aarch64'
           cpu = 'aarch64'
           endian = 'little'
+
+          [properties]
+          pkg_config_libdir = '/workspace/shims'
           EOF
           ls -la android-cross.txt
 
@@ -58,11 +61,13 @@ jobs:
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           echo "-> Ejecutando reconfiguración nativa y compilación de wrapper dentro de Docker..."
+          # Se añade la corrección de permisos al final del comando de bash para evitar bloqueos POSIX en el host
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
             rm -rf ${{ env.BUILD_DIR }} && \
             meson setup ${{ env.BUILD_DIR }} --cross-file android-cross.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
-            ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so
+            ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
+            chmod -R 777 ${{ env.BUILD_DIR }}
           "
 
       # REESTRUCTURACIÓN COMPATIBLE: Empaquetamos el binario nativo 'wrapper' directo para el instalador
