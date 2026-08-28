@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-android-wrapper:
-    runs-on: ubuntu-24.04-arm # Usamos ARM para acelerar la compilación cruzada del NDK de forma nativa
+    runs-on: ubuntu-latest  # Corregido: Volvemos al entorno estándar universalmente compatible
     strategy:
       matrix:
         build-type: [release]
@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.11"
 
-       - name: Install Build Dependencies
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -138,16 +138,13 @@ jobs:
           echo "-> Inicializando empaquetado estructural con arquitectura compatible para Bannerlator..."
           rm -rf pkg
           
-          # Bannerlator lee los componentes clonando las librerías dinámicas del sistema de Windows
-          # Mapeamos 64-bits a d3d y system32
+          # Mapeamos a las rutas de traducción de librerías de Bannerlator
           mkdir -p pkg/d3d/syswow64
           mkdir -p pkg/d3d/system32
           
           echo "-> Extrayendo y renombrando el binario original..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            # El wrapper requiere renombrarse o inyectarse con un patrón que el subsistema Wine de Bannerlator reconozca en contenedores ARM64EC o Box64
             cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/d3d/system32/libvulkan_panfrost_kbase.so
-            # Reducimos peso eliminando símbolos redundantes que ralentizan la carga del wrapper en el espacio de usuario de Android
             strip --strip-unneeded pkg/d3d/system32/libvulkan_panfrost_kbase.so
           else
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
@@ -158,19 +155,41 @@ jobs:
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
             cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
             
-            # Modificamos el JSON dinámicamente mediante Python embebido para actualizar la ruta apuntando a la nueva estructura del wrapper de Bannerlator
-            python3 - pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json "/usr/lib/libvulkan_panfrost_kbase.so" <<'PY'
-          import json, sys
-          with open(sys.argv[1], encoding="utf-8") as s:
-              m = json.load(s)
-          m["ICD"]["library_path"] = sys.argv[2]
-          with open(sys.argv[1], "w", encoding="utf-8") as o:
-              json.dump(m, o, indent=4)
-              o.write("\n")
-          PY
+            # Modificación correcta usando sys.argv
+            python3 - pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json "d3d/system32/libvulkan_panfrost_kbase.so" <<'PY'
+import json, sys
+json_path = sys.argv[1]
+lib_path = sys.argv[2]
+with open(json_path, encoding="utf-8") as s:
+    m = json.load(s)
+m["ICD"]["library_path"] = lib_path
+with open(json_path, "w", encoding="utf-8") as o:
+    json.dump(m, o, indent=4)
+    o.write("\n")
+PY
           else
             echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
           fi
+
+          # ====================================================================
+          # PASO OBLIGATORIO PARA BANNERLATOR: Inyección de Metadatos
+          # ====================================================================
+          echo "-> Creando archivo meta.json para el Gestor de Bannerlator..."
+          cat << 'EOF' > pkg/meta.json
+{
+  "name": "PanVK Panfrost Kbase Mod",
+  "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver",
+  "type": "graphics_driver",
+  "version": "1.0.0",
+  "author": "Mesa Community / Mod",
+  "compatibility": {
+    "min_bannerlator_version": "3.0"
+  }
+}
+EOF
+          # Limpiamos tabulaciones accidentales generadas por la sangría del bloque shell heredado
+          sed -i 's/^[ \t]*//' pkg/meta.json
+          # ====================================================================
 
           echo "-> Asignando permisos POSIX..."
           chmod -R 755 pkg/
@@ -183,7 +202,7 @@ jobs:
         run: |
           echo "-> Generando archivo comprimido .tzst limpio que Bannerlator validará..."
           cd pkg
-          # Bannerlator requiere compresión zstd pura preservando solo los directorios d3d y share creados
+          # Cierre del comando tar para incluir d3d, share y meta.json de forma recursiva
           tar -I 'zstd -19 -T0' -cf ../PanVK_kbase_wrapper.tzst *
           cd ..
 
