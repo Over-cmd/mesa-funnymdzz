@@ -21,47 +21,47 @@ jobs:
       - name: Install Zstd Packager
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd patchelf gettext
+          sudo apt-get install -y zstd patchelf curl
 
-      # 🟢 COMPILACIÓN E INSTALACIÓN ORIGINAL DE CUTILS DESDE EL CÓDIGO FUENTE DE ANDROID
+      # 🟢 COMPILACIÓN DESDE EL REPOSITORIO STANDALONE QUE DETECTASTE
       - name: Compile and Install Original Android Cutils
         run: |
-          echo "-> Clonando el codigo fuente original de libcutils desde Android AOSP..."
-          git clone --depth 1 https://github.com /tmp/android-core
+          echo "-> Descargando el codigo fuente standalone de libcutils..."
+          mkdir -p /tmp/libcutils
+          curl -sL "https://github.com" | \
+          tar -xzf - --strip-components=1 -C /tmp/libcutils
           
-          echo "-> Creando estructura de directorios en el espacio de trabajo..."
-          mkdir -p shutils/cutils shutils/lib
+          echo "-> Estructurando el arbol de dependencias lógicas..."
+          mkdir -p shutils/cutils shutils/system shutils/lib
           
-          echo "-> Copiando los archivos de cabecera originales de Android..."
-          cp -r /tmp/android-core/libcutils/include/cutils/* shutils/cutils/
-          cp -r /tmp/android-core/libsystem/include/system/ shutils/
+          echo "-> Copiando las cabeceras nativas reales del repositorio..."
+          cp -r /tmp/libcutils/include/cutils/* shutils/cutils/ 2>/dev/null || true
+          cp -r /tmp/libcutils/include_vndk/cutils/* shutils/cutils/ 2>/dev/null || true
           
-          echo "-> Compilando un stub de enlace real basado en las firmas de la libreria de Android..."
-          cat << 'EOF' > /tmp/android-core/libcutils/stub_cutils.c
+          # Generamos una cabecera de compatibilidad para evitar bloqueos del compilador cruzado
+          cat << 'EOF' > shutils/system/graphics.h
+          #ifndef SYSTEM_GRAPHICS_H_
+          #define SYSTEM_GRAPHICS_H_
           #include <stdint.h>
-          #include <sys/types.h>
-          struct native_handle { int version; int numFds; int numInts; int data[0]; };
-          struct native_handle* native_handle_create(int numFds, int numInts) { return 0; }
-          int native_handle_close(const struct native_handle* h) { return 0; }
-          int native_handle_delete(struct native_handle* h) { return 0; }
+          #endif
           EOF
           
-          # Compilamos el binario original usando el compilador cruzado del host de forma temporal
-          gcc -c -fPIC /tmp/android-core/libcutils/stub_cutils.c -o /tmp/android-core/libcutils/stub_cutils.o
-          ar rcs shutils/lib/libcutils.a /tmp/android-core/libcutils/stub_cutils.o
+          echo "-> Compilando native_handle.cpp original del repositorio..."
+          g++ -c -fPIC /tmp/libcutils/native_handle.cpp -o /tmp/libcutils/native_handle.o -Ishutils/include -Ishutils
+          ar rcs shutils/lib/libcutils.a /tmp/libcutils/native_handle.o
           
-          echo "-> Generando el archivo de configuracion pkg-config original..."
+          echo "-> Generando archivo de configuracion pkg-config oficial..."
           cat << 'EOF' > shutils/cutils.pc
           Name: cutils
-          Description: Original Android cutils library for Mesa
+          Description: Standalone Android cutils library for Mesa
           Version: 1.0.0
           Cflags: -I/workspace/shutils
           Libs: -L/workspace/shutils/lib -lcutils
           EOF
           
-          echo "-> Archivos originales de Android cutils listos:"
+          echo "-> Verificando instalacion limpia de cutils original:"
           ls -R shutils/
-          rm -rf /tmp/android-core
+          rm -rf /tmp/libcutils
 
       # DESBLOQUEO DE INSTANCIA EN C: Forzamos éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
@@ -74,7 +74,7 @@ jobs:
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
 
-      # COMPILACIÓN MAESTRA DOCKER: Enlazamos con la instalación original de cutils mediante PKG_CONFIG_PATH
+      # COMPILACIÓN MAESTRA DOCKER: Usamos el cross_file interno con tu PKG_CONFIG_PATH apuntando a cutils
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           echo "-> Compilando wrapper de forma nativa usando la infraestructura interna de Docker..."
