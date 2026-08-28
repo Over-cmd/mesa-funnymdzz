@@ -19,6 +19,7 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
+       Tarjeta de video / Procesador: Instalar Python y dependencias
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -99,28 +100,28 @@ jobs:
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
-          echo "-> Moviendo el driver con su nombre nativo Panfrost..."
-          cp build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_panfrost.so
+          echo "-> Renombrando y moviendo el archivo .so a libvulkan_wrapper.so para permitir la instalación..."
+          cp build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
           
-          echo "-> Inyectando manifiesto JSON ICD original exacto de 64 bits (AArch64)..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
+          echo "-> Inyectando el manifiesto JSON con los nombres obligatorios del Wrapper original..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
                   "api_version": "1.4.352",
                   "library_arch": "64",
-                  "library_path": "libvulkan_panfrost.so"
+                  "library_path": "libvulkan_wrapper.so"
               },
               "file_format_version": "1.0.1"
           }
           EOF
           
-          echo "-> Inyectando manifiesto JSON ICD original de 32 bits (ARM)..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
+          echo "-> Inyectando el manifiesto JSON de 32 bits correspondiente..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           {
               "ICD": {
                   "api_version": "1.4.352",
                   "library_arch": "32",
-                  "library_path": "libvulkan_panfrost.so"
+                  "library_path": "libvulkan_wrapper.so"
               },
               "file_format_version": "1.0.1"
           }
