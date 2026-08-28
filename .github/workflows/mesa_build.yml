@@ -24,13 +24,13 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 CORRECCIÓN 1: Se eliminó el espacio roto y se inyectó la URL real completa hacia tu rama wrapper-25
+      # 🟢 CORRECCIÓN 1: Ruta y URL corregidas para jalar la carpeta midgard desde tu repositorio estable wrapper-25
       - name: Automate Sparse Checkout for Midgard Folder
         run: |
           echo "-> Realizando clonación selectiva de la carpeta de hardware faltante..."
           rm -rf src/panfrost/midgard
           
-          # Clonamos de forma ultra-rápida especificando tu repositorio de origen real sin espacios rotos
+          # Clonamos de forma ultra-rápida especificando la rama real del fork donde reside Bifrost
           git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
           cd /tmp/gamenative-src
           git sparse-checkout set src/panfrost/midgard
@@ -92,7 +92,7 @@ jobs:
           cargo install --locked --version 0.72.1 bindgen-cli
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
 
-      # Generar Herramientas del Host enlazando de forma estricta vtn-bindgen2
+      # 🟢 CORRECCIÓN 2: Ajustado el alias 'vtn-bindgen2' para que Meson localice la herramienta host de SPIR-V correctamente
       - name: Generate Host Tools
         run: |
           echo "-> Compilando herramientas nativas de host..."
@@ -128,16 +128,17 @@ jobs:
         run: |
           meson compile -C build --jobs 2
 
-      # EMPAQUETADO COMPATIBLE EN FORMATO WRAPPER PARA EL INSTALADOR DE WINLATOR
+      # 🟢 REESTRUCTURACIÓN AUTOMÁTICA EN FORMATO WRAPPER PARA EL INSTALADOR DE WINLATOR
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
           echo "-> Extrayendo el driver PanVK compilado..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
+            # Renombramos el archivo físico a libvulkan_wrapper.so para cumplir las reglas del instalador
             cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
             
-            # Ajustamos la cabecera con patchelf para que el cargador mantenga estables los símbolos binarios
+            # Cambiamos la cabecera interna del ELF usando patchelf para que el cargador mantenga estables los símbolos binarios
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
             
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
@@ -156,7 +157,6 @@ jobs:
           chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vulkan/icd.d/*.json pkg/usr/share/vulkan/settings.d/*.json pkg/usr/version.txt
           tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
 
-      # Subida del artefacto final cerrado de forma estricta
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
         with:
