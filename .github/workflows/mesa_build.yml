@@ -1,4 +1,4 @@
-name: PanVK kbase wrapper release
+name: PanVK kbase wrapper release (Docker-Leegao Flow)
 
 on:
   push:
@@ -9,126 +9,59 @@ permissions:
   contents: read
 
 jobs:
-  build-android-wrapper:
-    runs-on: ubuntu-latest  # Entorno estándar universalmente compatible
-    strategy:
-      matrix:
-        build-type: [release]
+  build-aarch64-wrapper:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_DIR: build
+      IMAGE_TAG: ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest
 
     steps:
-      - name: Checkout Source
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Patch Drivers and anon_file
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Ejecutamos el compilador en contenedor de Docker tal como lo hace Leegao
+      - name: wrapper-compiler (Docker Run)
         run: |
-          echo "-> Aplicando parches de compatibilidad para Android..."
-          if [ -f "src/util/anon_file.c" ]; then
-            sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
-          fi
-          echo "-> Aplicando parche automático de core count a pan_device.c..."
-          find . -name "pan_device.c" -exec sed -i 's/pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_id_range = pan_query_core_count(\&dev->kmod.dev->props);/g' {} +
-          find . -name "pan_device.c" -exec sed -i 's/\\&/\&/g' {} +
+          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential llvm-dev libclang-dev libelf-dev spirv-tools bison flex libdrm-dev pkg-config gettext cargo rustc
-          LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
-          echo "-> Detectada versión de LLVM: ${LLVM_MAJOR}"
-          sudo apt-get install -y "libclc-${LLVM_MAJOR}-dev" "libllvmspirvlib-${LLVM_MAJOR}-dev" "libclang-${LLVM_MAJOR}-dev"
-          python -m pip install --upgrade pip
-          pip install mako PyYAML 'meson>=1.4.0' ninja packaging
-
-      - name: Install and Pin Bindgen for Mesa
-        run: |
-          cargo install --locked --version 0.72.1 bindgen-cli
-          echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
-
-      - name: Build Host Tools
-        run: |
-          echo "-> Compilando herramientas nativas de host..."
-          meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
-          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-gen2"
-          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
-          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
-          echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
-
-      - name: Configure Cross-Compilation (Meson NDK)
-        env:
-          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
-        run: |
-          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
-          
-          # DETECCIÓN AUTOMÁTICA DE VERSIÓN DE CLANG EN EL NDK
-          export CLANG_VERSION=$(ls "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/clang")
-          echo "-> Detectada versión interna de Clang en NDK: $CLANG_VERSION"
-          
-          echo "-> Procesando android.toml con envsubst..."
-          envsubst < android.toml > android-cross.txt
-          
-          meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers=[] -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=panfrost -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
-
-      - name: Compile Project
-        run: |
-          echo "-> Compilando driver PanVK para Android ARM64..."
-          meson compile -C build
-
+      # Una vez que Docker termina de compilar, estructuramos para el instalador de Bannerlator
       - name: Stage runtime files for Bannerlator
         run: |
           echo "-> Inicializando empaquetado estructural solicitado (usr/lib y usr/share)..."
           rm -rf pkg
-          
-          # Estructura raíz nativa solicitada
-          mkdir -p pkg/usr/lib
-          mkdir -p pkg/usr/share/vulkan/icd.d
-          
-          echo "-> Extrayendo y renombrando el binario original a la ruta usr/lib..."
-          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
-            
-            # Usar llvm-strip del NDK para evitar corrupciones de arquitectura cruzada
-            STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
-            if [ -f "$STRIP_BIN" ]; then
-              $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_panfrost_kbase.so
-            else
-              strip --strip-unneeded pkg/usr/lib/libvulkan_panfrost_kbase.so
-            fi
+          mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d
+
+          echo "-> Moviendo y renombrando el binario compilado por Docker..."
+          # El compilador genera libvulkan_wrapper.so en la carpeta build/
+          if [ -f "${{ env.BUILD_DIR }}/libvulkan_wrapper.so" ]; then
+            cp -v "${{ env.BUILD_DIR }}/libvulkan_wrapper.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
           else
-            echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
+            echo "ERROR: ¡No se encontró el binario compilado por Docker!" && exit 1
           fi
-          
-          echo "-> Procesando y reescribiendo de forma segura el manifiesto ICD..."
-          if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
-            # Copiamos el JSON con el nuevo nombre exacto solicitado
-            ORIG_JSON="build/src/panfrost/vulkan/panfrost_icd.aarch64.json"
-            DEST_JSON="pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json"
-            
-            # Usamos Python nativo para prevenir errores estructurales o de codificación en el JSON
-            python3 -c '
-import json
-with open("'"$ORIG_JSON"'", "r", encoding="utf-8") as f:
-    data = json.load(f)
-data["ICD"]["library_path"] = "usr/lib/libvulkan_panfrost_kbase.so"
-with open("'"$DEST_JSON"'", "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=4)
-'
-            echo "-> JSON modificado con éxito usando Python. Validando estructura generada:"
-            cat "$DEST_JSON"
-          else
-            echo "ERROR: ¡No se encontró el manifiesto original panfrost_icd.aarch64.json!" && exit 1
-          fi
-          
-          echo "-> Creando archivo meta.json en la raíz del paquete..."
+
+          # ====================================================================
+          # CREACIÓN DEL MANIFIESTO ICD VÁLIDO (Previene errores de fin de archivo)
+          # ====================================================================
+          echo "-> Escribiendo manifiesto libvulkan_panfrost_kbase.aarch64.json..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+{
+    "file_format_version": "1.0.0",
+    "ICD": {
+        "library_path": "usr/lib/libvulkan_panfrost_kbase.so",
+        "api_version": "1.1.0"
+    }
+}
+EOF
+
+          # ====================================================================
+          # INYECCIÓN DEL ARCHIVO META PARA EL GESTOR DE BANNERLATOR
+          # ====================================================================
+          echo "-> Creando archivo meta.json para Bannerlator..."
           echo '{"name": "PanVK Panfrost Kbase Mod", "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver", "type": "graphics_driver", "version": "1.0.0", "author": "Mesa Community / Mod", "compatibility": {"min_bannerlator_version": "3.0"}}' > pkg/meta.json
-          
+
           echo "-> Asignando permisos POSIX..."
           chmod -R 755 pkg/
           echo "=== Árbol Estructural Preparado ==="
