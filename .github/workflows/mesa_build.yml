@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-android-wrapper:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Entorno estándar universalmente compatible
     strategy:
       matrix:
         build-type: [release]
@@ -66,8 +66,14 @@ jobs:
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
+          
+          # DETECCIÓN AUTOMÁTICA DE VERSIÓN DE CLANG EN EL NDK
+          export CLANG_VERSION=$(ls "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/clang")
+          echo "-> Detectada versión interna de Clang en NDK: $CLANG_VERSION"
+          
           echo "-> Procesando android.toml con envsubst..."
           envsubst < android.toml > android-cross.txt
+          
           meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers=[] -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=panfrost -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
 
       - name: Compile Project
@@ -99,8 +105,6 @@ jobs:
           echo "-> Vinculando el manifiesto ICD directamente en el árbol interno..."
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
             cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-            
-            # Corrección del sed: se elimina la coma final para mantener la validez estricta del archivo JSON
             sed -i 's|"library_path":.*|"library_path": "d3d/system32/libvulkan_panfrost_kbase.so"|g' pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
           else
             echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
