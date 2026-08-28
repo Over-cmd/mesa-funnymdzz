@@ -24,6 +24,15 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
+      # 🟢 SUSTITUCIÓN NATIVA DEL DRIVER: Cambia el nombre de compilación interno de Panfrost a Wrapper
+      - name: Native Driver Rename from Panfrost to Wrapper
+        run: |
+          echo "-> Forzando a Meson a compilar el driver con identidad Wrapper de forma nativa..."
+          sed -i 's/output : '\''libvulkan_panfrost.so'\''/output : '\''libvulkan_wrapper.so'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
+          sed -i 's/name_prefix : '\''libvulkan_panfrost'\''/name_prefix : '\''libvulkan_wrapper'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
+          sed -i 's/'\''vulkan_panfrost'\''/'\''vulkan_wrapper'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
+
+       Tarjeta de video / Procesador: Instalar Python y dependencias
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -128,13 +137,13 @@ jobs:
           rm -rf pkg
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
-          
-          # Creamos la carpeta de configuración limpia para Winlator para anular las 16 variables de debug dañinas
           mkdir -p pkg/usr/share/vulkan/settings.d
           
-          echo "-> Moviendo el binario compilado..."
-          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
+          echo "-> Moviendo el binario generado de forma nativa..."
+          # Buscamos el archivo bajo el nuevo nombre nativo que forzamos en el código fuente
+          TARGET_SO=$(find build/ -name "libvulkan_wrapper.so" | head -n 1)
+          if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
+            cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
             
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then
@@ -143,7 +152,7 @@ jobs:
               strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
             fi
           else
-            echo "ERROR: ¡No se encontró la librería compilada libvulkan_panfrost.so!" && exit 1
+            echo "ERROR: ¡No se encontró la librería compilada libvulkan_wrapper.so nativa!" && exit 1
           fi
           
           echo "-> Inyectando manifiestos JSON ICD limpios y optimizados..."
