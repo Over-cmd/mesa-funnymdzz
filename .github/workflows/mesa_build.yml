@@ -21,9 +21,9 @@ jobs:
       - name: Install Zstd Packager
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd patchelf envsubst
+          sudo apt-get install -y zstd patchelf gettext
 
-      # 🟢 GENERACIÓN PREVIA DEL CROSS-FILE: Crear android-cross.txt en la raíz antes de levantar Docker
+      # GENERACIÓN PREVIA DEL CROSS-FILE: Crear android-cross.txt usando la macro nativa de gettext
       - name: Generate Cross-File Template
         run: |
           echo "-> Detectando plantilla de compilación cruzada..."
@@ -33,7 +33,7 @@ jobs:
           elif [ -f "android-cross.txt.template" ]; then
             envsubst < android-cross.txt.template > android-cross.txt
           else
-            echo "ADVERTENCIA: No se encontró android.toml, generando cross-file plano de emergencia..."
+            echo "-> Generando cross-file plano de emergencia..."
             cat << 'EOF' > android-cross.txt
             [binaries]
             c = 'aarch64-linux-android30-clang'
