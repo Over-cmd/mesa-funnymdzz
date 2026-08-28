@@ -25,7 +25,6 @@ jobs:
           if [ -f "src/util/anon_file.c" ]; then
             sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
           fi
-          
           echo "-> Aplicando parche automático de core count a pan_device.c..."
           find . -name "pan_device.c" -exec sed -i 's/pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_id_range = pan_query_core_count(\&dev->kmod.dev->props);/g' {} +
           find . -name "pan_device.c" -exec sed -i 's/\\&/\&/g' {} +
@@ -38,58 +37,25 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            llvm-dev \
-            libclang-dev \
-            libelf-dev \
-            spirv-tools \
-            bison \
-            flex \
-            libdrm-dev \
-            pkg-config \
-            gettext \
-            cargo \
-            rustc
-
-          # Detectamos dinámicamente la versión mayor de LLVM instalada en el entorno (ej. 18 o 19)
+          sudo apt-get install -y build-essential llvm-dev libclang-dev libelf-dev spirv-tools bison flex libdrm-dev pkg-config gettext cargo rustc
           LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
           echo "-> Detectada versión de LLVM: ${LLVM_MAJOR}"
-
-          # Instalamos los candidatos específicos correspondientes a esa versión de LLVM
-          sudo apt-get install -y \
-            "libclc-${LLVM_MAJOR}-dev" \
-            "libllvmspirvlib-${LLVM_MAJOR}-dev" \
-            "libclang-${LLVM_MAJOR}-dev"
-
+          sudo apt-get install -y "libclc-${LLVM_MAJOR}-dev" "libllvmspirvlib-${LLVM_MAJOR}-dev" "libclang-${LLVM_MAJOR}-dev"
           python -m pip install --upgrade pip
           pip install mako PyYAML 'meson>=1.4.0' ninja packaging
 
       - name: Install and Pin Bindgen for Mesa
         run: |
-          # El repositorio de funnymdzz requiere explícitamente fijar bindgen 0.72.1 para evitar fallos de compilación con estructuras de 1 byte
           cargo install --locked --version 0.72.1 bindgen-cli
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
 
       - name: Build Host Tools
         run: |
           echo "-> Compilando herramientas nativas de host..."
-          meson setup build-host \
-            -Dplatforms=[] \
-            -Dgallium-drivers=[] \
-            -Dvulkan-drivers=[] \
-            -Dtools=panfrost \
-            -Dprecomp-compiler=enabled \
-            -Dinstall-precomp-compiler=true \
-            -Dllvm=enabled \
-            -Dmesa-clc=enabled \
-            -Dinstall-mesa-clc=true
-            
+          meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
           ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
-          
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-gen2"
-          
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
@@ -101,32 +67,14 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           
+          # DETECCIÓN AUTOMÁTICA DE VERSIÓN DE CLANG EN EL NDK
+          export CLANG_VERSION=$(ls "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/clang")
+          echo "-> Detectada versión interna de Clang en NDK: $CLANG_VERSION"
+          
           echo "-> Procesando android.toml con envsubst..."
           envsubst < android.toml > android-cross.txt
           
-          meson setup build --reconfigure \
-            --cross-file android-cross.txt \
-            -Dbuildtype=${{ matrix.build-type }} \
-            -Dplatforms=android \
-            -Dandroid-stub=true \
-            -Dandroid-libbacktrace=disabled \
-            -Dplatform-sdk-version=30 \
-            -Dglx=disabled \
-            -Dgbm=disabled \
-            -Degl=disabled \
-            -Dopengl=false \
-            -Dgles1=disabled \
-            -Dgles2=disabled \
-            -Dglvnd=disabled \
-            -Dvalgrind=disabled \
-            -Dgallium-drivers=[] \
-            -Dshared-glapi=disabled \
-            -Dzstd=disabled \
-            -Dmesa-clc=system \
-            -Dprecomp-compiler=system \
-            -Dvulkan-drivers=panfrost \
-            -Dllvm=disabled \
-            -Dpanfrost-kmds=kbase,panthor
+          meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers=[] -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=panfrost -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
 
       - name: Compile Project
         run: |
@@ -134,83 +82,69 @@ jobs:
           meson compile -C build
 
       - name: Stage runtime files for Bannerlator
-        env:
-          TARGET_JSON_PATH: "pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json"
-          TARGET_LIB_PATH: "d3d/system32/libvulkan_panfrost_kbase.so"
         run: |
-          echo "-> Inicializando empaquetado estructural con arquitectura compatible para Bannerlator..."
+          echo "-> Inicializando empaquetado estructural solicitado (usr/lib y usr/share)..."
           rm -rf pkg
           
-          # Mapeamos a las rutas de traducción de librerías de Bannerlator
-          mkdir -p pkg/d3d/syswow64
-          mkdir -p pkg/d3d/system32
+          # Estructura raíz nativa solicitada
+          mkdir -p pkg/usr/lib
+          mkdir -p pkg/usr/share/vulkan/icd.d
           
-          echo "-> Extrayendo y renombrando el binario original..."
+          echo "-> Extrayendo y renombrando el binario original a la ruta usr/lib..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/d3d/system32/libvulkan_panfrost_kbase.so
-            strip --strip-unneeded pkg/d3d/system32/libvulkan_panfrost_kbase.so
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
+            
+            # Usar llvm-strip del NDK para evitar corrupciones de arquitectura cruzada
+            STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+            if [ -f "$STRIP_BIN" ]; then
+              $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_panfrost_kbase.so
+            else
+              strip --strip-unneeded pkg/usr/lib/libvulkan_panfrost_kbase.so
+            fi
           else
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
 
-          echo "-> Vinculando el manifiesto ICD directamente en el árbol interno..."
-          mkdir -p pkg/share/vulkan/icd.d
-          if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
-            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" "$TARGET_JSON_PATH"
-            
-            # Ejecución limpia de Python usando variables de entorno seguras (Evita fallos de parsing de Bash en YAML)
-            python3 <<'PY'
-import json
-import os
+      - name: Process ICD Manifest safely with Python
+        env:
+          ORIG_JSON: "build/src/panfrost/vulkan/panfrost_icd.aarch64.json"
+          DEST_JSON: "pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json"
+        shell: python
+        run: |
+          import json
+          import os
+          
+          orig_path = os.environ['ORIG_JSON']
+          dest_path = os.environ['DEST_JSON']
+          
+          if os.path.exists(orig_path):
+              with open(orig_path, 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+              
+              data['ICD']['library_path'] = 'usr/lib/libvulkan_panfrost_kbase.so'
+              
+              with open(dest_path, 'w', encoding='utf-8') as f:
+                  json.dump(data, f, indent=4)
+              print("-> JSON modificado con éxito.")
+          else:
+              print(f"ERROR: No se encontró el manifiesto original en {orig_path}")
+              exit(1)
 
-json_path = os.environ["TARGET_JSON_PATH"]
-lib_path = os.environ["TARGET_LIB_PATH"]
-
-with open(json_path, encoding="utf-8") as s:
-    m = json.load(s)
-
-m["ICD"]["library_path"] = lib_path
-
-with open(json_path, "w", encoding="utf-8") as o:
-    json.dump(m, o, indent=4)
-    o.write("\n")
-PY
-          else
-            echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
-          fi
-
-          # ====================================================================
-          # PASO OBLIGATORIO PARA BANNERLATOR: Inyección de Metadatos
-          # ====================================================================
-          echo "-> Creando archivo meta.json para el Gestor de Bannerlator..."
-          cat << 'EOF' > pkg/meta.json
-{
-  "name": "PanVK Panfrost Kbase Mod",
-  "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver",
-  "type": "graphics_driver",
-  "version": "1.0.0",
-  "author": "Mesa Community / Mod",
-  "compatibility": {
-    "min_bannerlator_version": "3.0"
-  }
-}
-EOF
-          # Limpiamos tabulaciones accidentales generadas por la sangría del bloque shell heredado
-          sed -i 's/^[ \t]*//' pkg/meta.json
-          # ====================================================================
-
+      - name: Finalize permissions and create metadata
+        run: |
+          echo "-> Creando archivo meta.json en la raíz del paquete..."
+          echo '{"name": "PanVK Panfrost Kbase Mod", "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver", "type": "graphics_driver", "version": "1.0.0", "author": "Mesa Community / Mod", "compatibility": {"min_bannerlator_version": "3.0"}}' > pkg/meta.json
+          
           echo "-> Asignando permisos POSIX..."
           chmod -R 755 pkg/
-          
           echo "=== Árbol Estructural Preparado ==="
           ls -R pkg
           echo "===================================="
 
       - name: Compress and Structure Package
         run: |
-          echo "-> Generando archivo comprimido .tzst limpio que Bannerlator validará..."
+          echo "-> Generando archivo comprimido .tzst con raíz usr/ y meta.json..."
           cd pkg
-          # Cierre del comando tar para incluir d3d, share y meta.json de forma recursiva
           tar -I 'zstd -19 -T0' -cf ../PanVK_kbase_wrapper.tzst *
           cd ..
 
