@@ -17,16 +17,14 @@ jobs:
         run: |
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
       
-      # 🟢 INYECCIÓN MAESTRA MULTI-CARPETA: Extrae todo el ecosistema Bifrost de tu repositorio gamenative-wrapper
       - name: Automate Sparse Checkout for Bifrost Ecosystem from your Repo
         run: |
           echo "-> Limpiando directorios modernos e incompletos..."
           rm -rf src/panfrost/midgard src/panfrost/compiler src/panfrost/include src/panfrost/lib
           
           echo "-> Descargando el backend completo de Bifrost de tu rama estable..."
-          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com/Over-cmd/gamenative-wrapper /tmp/gamenative-src
+          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
           cd /tmp/gamenative-src
-          # Marcamos los 4 directorios críticos de hardware que confirmamos en el árbol de archivos
           git sparse-checkout set src/panfrost/midgard src/panfrost/compiler src/panfrost/include src/panfrost/lib
           cd $GITHUB_WORKSPACE
           
@@ -39,6 +37,11 @@ jobs:
           
           echo "-> Registrando subdirectorio en src/panfrost/meson.build..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
+          
+          # 🟢 NUEVA CORRECCIÓN QUIRÚRGICA: Resolver el conflicto de la variable inc_panfrost_hw
+          echo "-> Corrigiendo variables de cabecera heredadas en el build de lib..."
+          sed -i 's/inc_panfrost_hw/inc_panfrost/g' src/panfrost/lib/meson.build 2>/dev/null || true
+          
           ls -la src/panfrost/midgard/meson.build
       
       - name: Redirect Panfrost Build Logic to Wrapper Identity natively
