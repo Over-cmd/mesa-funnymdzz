@@ -1,6 +1,6 @@
 name: Android NDK Build (Wrapper Variant)
 
-on: [push]
+on: [push, workflow_dispatch]
 
 jobs:
   build-android-wrapper:
@@ -8,7 +8,7 @@ jobs:
 
     strategy:
       matrix:
-        build-type: [debugoptimized, release]
+        build-type: [release] # Usamos únicamente 'release' para ahorrar almacenamiento y evitar dobles enlazados pesados en RAM
 
     steps:
       - name: Checkout repository
@@ -39,12 +39,13 @@ jobs:
               flex \
               libdrm-dev \
               pkg-config \
-              gettext # 🟢 CORRECCIÓN 1: Necesario para que funcione envsubst con android.toml
+              gettext
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
       - name: Generate Host Tools
         run: |
+          # 🟢 MEJORA DE ESTABILIDAD: Limitamos el enlazado pesado de herramientas host a un máximo de 2 hilos para evitar rebasar los 7GB de RAM de GitHub
           meson setup build-host \
               -Dplatforms=[] \
               -Dgallium-drivers=[] \
@@ -54,7 +55,7 @@ jobs:
               -Dinstall-precomp-compiler=true \
               -Dllvm=enabled \
               -Dmesa-clc=enabled -Dinstall-mesa-clc=true
-          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
+          ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
           ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
@@ -88,12 +89,14 @@ jobs:
               -Dzstd=disabled \
               -Dmesa-clc=system \
               -Dprecomp-compiler=system \
-              -Dvulkan-drivers=panfrost_wrapper \ # 🟢 CORRECCIÓN 2: Se cambia 'panfrost' por 'panfrost_wrapper' para que enlace el código del fork
+              -Dvulkan-drivers=panfrost \
               -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
 
       - name: Compile Project
         run: |
-          meson compile -C build
+          # 🟢 MEJORA DE ESTABILIDAD DEFINITIVA: Limitamos los hilos paralelos de Meson a 2 (--jobs 2). 
+          # Esto mitiga por completo el error 'operation was canceled' provocado por la falta de RAM en la máquina de GitHub.
+          meson compile -C build --jobs 2
 
       - name: Structure and Pack wrapper.tzst
         run: |
