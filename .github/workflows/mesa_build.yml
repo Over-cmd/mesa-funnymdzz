@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-android-wrapper:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm # Usamos ARM para acelerar la compilación cruzada del NDK de forma nativa
     strategy:
       matrix:
         build-type: [release]
@@ -40,24 +40,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            llvm-19-dev \
-            libclang-19-dev \
-            libclc-19-dev \
-            libllvmspirvlib-19-dev \
+            llvm-dev \
+            libclang-dev \
+            libclc-dev \
+            libllvmspirvlib-dev \
             libelf-dev \
             spirv-tools \
             bison \
             flex \
             libdrm-dev \
             pkg-config \
-            gettext
+            gettext \
+            cargo \
+            rustc
 
           python -m pip install --upgrade pip
           pip install mako PyYAML 'meson>=1.4.0' ninja packaging
 
+      - name: Install and Pin Bindgen for Mesa
+        run: |
+          # El repositorio de funnymdzz requiere explícitamente fijar bindgen 0.72.1 para evitar fallos de compilación con estructuras de 1 byte
+          cargo install --locked --version 0.72.1 bindgen-cli
+          echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
+
       - name: Build Host Tools
         run: |
-          echo "-> Compilando herramientas nativas de host (x86_64)..."
+          echo "-> Compilando herramientas nativas de host..."
           meson setup build-host \
             -Dplatforms=[] \
             -Dgallium-drivers=[] \
@@ -117,50 +125,62 @@ jobs:
           echo "-> Compilando driver PanVK para Android ARM64..."
           meson compile -C build
 
-      - name: Stage runtime files
+      - name: Stage runtime files for Bannerlator
         run: |
-          echo "-> Inicializando empaquetado estructural con nombres originales de Mesa..."
+          echo "-> Inicializando empaquetado estructural con arquitectura compatible para Bannerlator..."
           rm -rf pkg
-          mkdir -p pkg/usr/lib
-          mkdir -p pkg/usr/share/vulkan/icd.d
           
-          echo "-> Extrayendo el binario original libvulkan_panfrost.so..."
+          # Bannerlator lee los componentes clonando las librerías dinámicas del sistema de Windows
+          # Mapeamos 64-bits a d3d y system32
+          mkdir -p pkg/d3d/syswow64
+          mkdir -p pkg/d3d/system32
+          
+          echo "-> Extrayendo y renombrando el binario original..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost.so
+            # El wrapper requiere renombrarse o inyectarse con un patrón que el subsistema Wine de Bannerlator reconozca en contenedores ARM64EC o Box64
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/d3d/system32/libvulkan_panfrost_kbase.so
+            # Reducimos peso eliminando símbolos redundantes que ralentizan la carga del wrapper en el espacio de usuario de Android
+            strip --strip-unneeded pkg/d3d/system32/libvulkan_panfrost_kbase.so
           else
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
 
-          echo "-> Copiando el archivo original panfrost_icd.aarch64.json generado por Meson..."
+          echo "-> Vinculando el manifiesto ICD directamente en el árbol interno..."
+          mkdir -p pkg/share/vulkan/icd.d
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
-            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
+            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+            
+            # Modificamos el JSON dinámicamente mediante Python embebido para actualizar la ruta apuntando a la nueva estructura del wrapper de Bannerlator
+            python3 - pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json "/usr/lib/libvulkan_panfrost_kbase.so" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8") as s:
+              m = json.load(s)
+          m["ICD"]["library_path"] = sys.argv[2]
+          with open(sys.argv[1], "w", encoding="utf-8") as o:
+              json.dump(m, o, indent=4)
+              o.write("\n")
+          PY
           else
-            echo "ERROR: ¡No se encontró el manifiesto original panfrost_icd.aarch64.json!" && exit 1
+            echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
           fi
 
-          echo "-> Generando variante de 32 bits basada estrictamente en el JSON nativo..."
-          cp pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
-          sed -i 's/"64"/"32"/g' pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
+          echo "-> Asignando permisos POSIX..."
+          chmod -R 755 pkg/
           
-          echo "-> Asignando permisos POSIX para entornos en contenedores/Android..."
-          chmod 755 pkg/usr pkg/usr/lib pkg/usr/share pkg/usr/share/vulkan pkg/usr/share/vulkan/icd.d
-          chmod 644 pkg/usr/lib/libvulkan_panfrost.so
-          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
-          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
-
           echo "=== Árbol Estructural Preparado ==="
           ls -R pkg
           echo "===================================="
 
       - name: Compress and Structure Package
         run: |
-          echo "-> Comprimiendo la estructura dual en formato wrapper.tzst..."
+          echo "-> Generando archivo comprimido .tzst limpio que Bannerlator validará..."
           cd pkg
-          tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
+          # Bannerlator requiere compresión zstd pura preservando solo los directorios d3d y share creados
+          tar -I 'zstd -19 -T0' -cf ../PanVK_kbase_wrapper.tzst *
           cd ..
 
       - name: Upload Final wrapper.tzst for Bannerlator
         uses: actions/upload-artifact@v4
         with:
-          name: Bannerlator-Mali-NDK-Wrapper
-          path: wrapper.tzst
+          name: PanVK-kbase-wrapper
+          path: PanVK_kbase_wrapper.tzst
