@@ -23,7 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd patchelf
 
-      # 🛠️ DESBLOQUEO DE INSTANCIA EN C: Forzamos éxito en vkCreateInstance en los archivos fuente para tu Mali-G52
+      # DESBLOQUEO DE INSTANCIA EN C: Forzamos éxito en vkCreateInstance en los archivos fuente para tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           PANVK_DEVICE=$(find src/ -name "*device.c" | head -n 1)
@@ -34,13 +34,18 @@ jobs:
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
 
-      # 🟢 COMPILACIÓN PROTEGIDA: Dejamos que el entorno aislado del Docker oficial compile de forma nativa sin romper los scripts algebraicos de Python
-      - name: Run Wrapper Compiler via Native Docker Container
+      # 🟢 CORRECCIÓN CRÍTICA: Sobrescribimos el punto de entrada de Docker para forzar a Ninja a compilar el target real de Panfrost
+      - name: Run Wrapper Compiler via Guided Docker Container
         run: |
-          echo "-> Compilando el código de forma segura dentro del contenedor Docker..."
-          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
+          echo "-> Ejecutando reconfiguración guiada y compilación dentro de Docker..."
+          docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
+            cd /workspace && \
+            rm -rf ${{ env.BUILD_DIR }} && \
+            meson setup ${{ env.BUILD_DIR }} --cross-file android-cross.txt -Dplatforms=android -Dvulkan-drivers=panfrost -Dgallium-drivers='' -Dbuildtype=release && \
+            ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_panfrost.so
+          "
 
-      # 🟢 REESTRUCTURACIÓN EXT-ELF: Renombramos y parcheamos el binario final externamente para cumplir las reglas de Winlator
+      # REESTRUCTURACIÓN EXT-ELF: Renombramos y parcheamos el binario final externamente para cumplir las reglas de Winlator
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
@@ -52,13 +57,13 @@ jobs:
             echo "-> Copiando y renombrando externamente el binario a libvulkan_wrapper.so..."
             cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
             
-            echo "-> Modificando la cabecera interna SONAME mediante patchelf para estabilizar vkCreateInstance..."
+            echo "-> Modificando la cabecera interna SONAME mediante patchelf para de Winlator..."
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
             
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; else strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; fi
           else
-            echo "ERROR: ¡No se encontró ningún binario en ${{ env.BUILD_DIR }}! Revisa los logs de compilación de Docker." && exit 1
+            echo "ERROR: ¡No se encontró ningún binario en ${{ env.BUILD_DIR }}!" && exit 1
           fi
           
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
