@@ -19,8 +19,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Compile Mesa with Docker
-        run: docker run --rm -v "$GITHUB_WORKSPACE:/workspace" ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest build
+      # Corregido: Forzamos a Docker a ejecutar Meson con "panfrost" en lugar de la opción "wrapper" inválida
+      - name: Compile Mesa with Docker (Overridden Drivers)
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest \
+            bash -c "meson setup build --reconfigure -Dvulkan-drivers=panfrost -Dplatforms=android && meson compile -C build"
 
       - name: Stage runtime files for Bannerlator
         run: |
@@ -29,10 +32,13 @@ jobs:
           mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d
 
           echo "-> Moviendo binario compilado por Docker..."
-          if [ -f "build/libvulkan_wrapper.so" ]; then
+          # Buscamos el binario final generado bajo la ruta de compilación de PanVK/Panfrost
+          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
+          elif [ -f "build/libvulkan_wrapper.so" ]; then
             cp -v "build/libvulkan_wrapper.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
           else
-            echo "ERROR: ¡No se encontró el binario compilado por Docker!" && exit 1
+            echo "ERROR: ¡No se encontró ningún binario gráfico compatible en el árbol de build!" && exit 1
           fi
 
           echo "-> Escribiendo manifiesto libvulkan_panfrost_kbase.aarch64.json..."
