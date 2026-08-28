@@ -21,22 +21,25 @@ jobs:
       - name: Install Zstd Packager
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd patchelf curl
+          sudo apt-get install -y zstd patchelf
 
-      # 🟢 COMPILACIÓN DESDE EL REPOSITORIO STANDALONE QUE DETECTASTE
+      # 🟢 DESCARGA SEGURA DE CUTILS NATIVO: Clonación interna mediante Checkout dirigida a directorio temporal
+      - name: Checkout Standalone libcutils Repo
+        uses: actions/checkout@v4
+        with:
+          repository: 'D-os/libcutils'
+          ref: 'master'
+          path: 'tmp_libcutils'
+
+      # Una vez clonado localmente por la acción de GitHub, estructuramos y compilamos las funciones reales
       - name: Compile and Install Original Android Cutils
         run: |
-          echo "-> Descargando el codigo fuente standalone de libcutils..."
-          mkdir -p /tmp/libcutils
-          curl -sL "https://github.com" | \
-          tar -xzf - --strip-components=1 -C /tmp/libcutils
-          
-          echo "-> Estructurando el arbol de dependencias lógicas..."
+          echo "-> Estructurando el arbol de dependencias logicas locales..."
           mkdir -p shutils/cutils shutils/system shutils/lib
           
-          echo "-> Copiando las cabeceras nativas reales del repositorio..."
-          cp -r /tmp/libcutils/include/cutils/* shutils/cutils/ 2>/dev/null || true
-          cp -r /tmp/libcutils/include_vndk/cutils/* shutils/cutils/ 2>/dev/null || true
+          echo "-> Copiando las cabeceras nativas reales desde el clon seguro..."
+          cp -r tmp_libcutils/include/cutils/* shutils/cutils/ 2>/dev/null || true
+          cp -r tmp_libcutils/include_vndk/cutils/* shutils/cutils/ 2>/dev/null || true
           
           # Generamos una cabecera de compatibilidad para evitar bloqueos del compilador cruzado
           cat << 'EOF' > shutils/system/graphics.h
@@ -47,8 +50,8 @@ jobs:
           EOF
           
           echo "-> Compilando native_handle.cpp original del repositorio..."
-          g++ -c -fPIC /tmp/libcutils/native_handle.cpp -o /tmp/libcutils/native_handle.o -Ishutils/include -Ishutils
-          ar rcs shutils/lib/libcutils.a /tmp/libcutils/native_handle.o
+          g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils/include -Ishutils
+          ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
           echo "-> Generando archivo de configuracion pkg-config oficial..."
           cat << 'EOF' > shutils/cutils.pc
@@ -61,7 +64,7 @@ jobs:
           
           echo "-> Verificando instalacion limpia de cutils original:"
           ls -R shutils/
-          rm -rf /tmp/libcutils
+          rm -rf tmp_libcutils
 
       # DESBLOQUEO DE INSTANCIA EN C: Forzamos éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
