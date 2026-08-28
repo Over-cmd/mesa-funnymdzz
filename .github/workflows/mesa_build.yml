@@ -1,45 +1,104 @@
-name: Termux-Build of Mesa Vulkan Wrapper
+name: Android NDK Build (Wrapper Variant)
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
-  build-aarch64-wrapper:
+  build-android-wrapper:
     runs-on: ubuntu-latest
-    env:
-      BUILD_DIR: build
-      IMAGE_TAG: ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest
+
+    strategy:
+      matrix:
+        build-type: [debugoptimized, release]
 
     steps:
-      # Descarga el código fuente directamente desde el repositorio Over-cmd/mesa-funnymdzz
-      - name: Checkout Over-cmd Mesa Code
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Patch anon_file.c for memfd_create
+        run: |
+          # SDK 30+ tiene memfd_create nativo en NDK
+          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          repository: 'Over-cmd/mesa-funnymdzz'
-          ref: 'ci' # Apunta a tu rama principal (cambiar a 'master' o 'main' si clonas desde otra rama)
+          python-version: "3.x"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Instalar herramientas de compresión Zstd en el servidor de GitHub
-      - name: Install Zstd Packager
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd
+          sudo apt-get install -y \
+              build-essential \
+              llvm-20-dev \
+              libclang-20-dev \
+              libclc-20-dev \
+              libllvmspirvlib-20-dev \
+              libelf-dev \
+              spirv-tools \
+              bison \
+              flex \
+              libdrm-dev \
+              pkg-config
+          python -m pip install --upgrade pip
+          pip install mako PyYAML meson ninja packaging
 
-      # COMPILACIÓN DEL DOCKER NATIVO SOBRE LAS FUENTES DE OVER-CMD
-      - name: wrapper-compiler
+      - name: Generate Host Tools
         run: |
-          docker run --rm -v "${{ github.workspace }}:/workspace" ${{ env.IMAGE_TAG }} ${{ env.BUILD_DIR }}
+          meson setup build-host \
+              -Dplatforms=[] \
+              -Dgallium-drivers=[] \
+              -Dvulkan-drivers=[] \
+              -Dtools=panfrost \
+              -Dprecomp-compiler=enabled \
+              -Dinstall-precomp-compiler=true \
+              -Dllvm=enabled \
+              -Dmesa-clc=enabled -Dinstall-mesa-clc=true
+          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
+          ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
+          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
 
-      # REESTRUCTURACIÓN DE CONTENEDOR EN FORMATO COMPATIBLE (USR/LIB/.TZST)
+      - name: Configure Meson
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
+          envsubst < android.toml > android-cross.txt
+          meson setup build --reconfigure \
+              --cross-file android-cross.txt \
+              -Dbuildtype=${{ matrix.build-type }} \
+              -Dplatforms=android,x11 \
+              -Dandroid-stub=true \
+              -Dandroid-libbacktrace=disabled \
+              -Dplatform-sdk-version=30 \
+              -Dglx=disabled \
+              -Dgbm=disabled \
+              -Degl=disabled \
+              -Dopengl=false \
+              -Dgles1=disabled \
+              -Dgles2=disabled \
+              -Dglvnd=disabled \
+              -Dvalgrind=disabled \
+              -Dgallium-drivers= \
+              -Dshared-glapi=disabled \
+              -Dzstd=disabled \
+              -Dmesa-clc=system \
+              -Dprecomp-compiler=system \
+              -Dvulkan-drivers=panfrost \
+              -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
+
+      - name: Compile Project
+        run: |
+          meson compile -C build
+
       - name: Structure and Pack wrapper.tzst
         run: |
-          echo "-> Creando arbol de directorios de Linux..."
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
-          
-          echo "-> Moviendo el driver compilado a usr/lib..."
-          cp ${{ env.BUILD_DIR }}/libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
+          cp build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
           
           echo "-> Inyectando manifiesto JSON ICD oficial de 64 bits (AArch64)..."
           cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
@@ -63,16 +122,13 @@ jobs:
           }
           EOF
           
-          echo "-> Comprimiendo la estructura dual en formato wrapper.tzst..."
           cd pkg
           tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
           cd ..
-          echo "-> ¡Empaquetado completado con éxito!"
 
-      # SUBIDA DEL ARTEFACTO FINAL WRAPPER.TZST
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
         with:
-          name: Mesa-Wrapper-Zstd
+          name: Mesa-Wrapper-Zstd-${{ matrix.build-type }}
           path: wrapper.tzst
           if-no-files-found: error
