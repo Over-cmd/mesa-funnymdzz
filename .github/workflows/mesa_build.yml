@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-android-wrapper:
-    runs-on: ubuntu-latest  # Corregido: Volvemos al entorno estándar universalmente compatible
+    runs-on: ubuntu-latest  # Entorno estándar universalmente compatible
     strategy:
       matrix:
         build-type: [release]
@@ -141,6 +141,7 @@ jobs:
           # Mapeamos a las rutas de traducción de librerías de Bannerlator
           mkdir -p pkg/d3d/syswow64
           mkdir -p pkg/d3d/system32
+          mkdir -p pkg/share/vulkan/icd.d
           
           echo "-> Extrayendo y renombrando el binario original..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
@@ -151,45 +152,20 @@ jobs:
           fi
 
           echo "-> Vinculando el manifiesto ICD directamente en el árbol interno..."
-          mkdir -p pkg/share/vulkan/icd.d
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
             cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
             
-            # Modificación correcta usando sys.argv
-            python3 - pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json "d3d/system32/libvulkan_panfrost_kbase.so" <<'PY'
-import json, sys
-json_path = sys.argv[1]
-lib_path = sys.argv[2]
-with open(json_path, encoding="utf-8") as s:
-    m = json.load(s)
-m["ICD"]["library_path"] = lib_path
-with open(json_path, "w", encoding="utf-8") as o:
-    json.dump(m, o, indent=4)
-    o.write("\n")
-PY
+            # Reemplazo directo con sed nativo: busca la línea library_path y reemplaza su valor de forma limpia sin romper el YAML
+            sed -i 's|"library_path":.*|"library_path": "d3d/system32/libvulkan_panfrost_kbase.so",|g' pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
           else
             echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
           fi
 
           # ====================================================================
-          # PASO OBLIGATORIO PARA BANNERLATOR: Inyección de Metadatos
+          # PASO OBLIGATORIO PARA BANNERLATOR: Inyección de Metadatos sin EOF complejo
           # ====================================================================
           echo "-> Creando archivo meta.json para el Gestor de Bannerlator..."
-          cat << 'EOF' > pkg/meta.json
-{
-  "name": "PanVK Panfrost Kbase Mod",
-  "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver",
-  "type": "graphics_driver",
-  "version": "1.0.0",
-  "author": "Mesa Community / Mod",
-  "compatibility": {
-    "min_bannerlator_version": "3.0"
-  }
-}
-EOF
-          # Limpiamos tabulaciones accidentales generadas por la sangría del bloque shell heredado
-          sed -i 's/^[ \t]*//' pkg/meta.json
-          # ====================================================================
+          echo '{"name": "PanVK Panfrost Kbase Mod", "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver", "type": "graphics_driver", "version": "1.0.0", "author": "Mesa Community / Mod", "compatibility": {"min_bannerlator_version": "3.0"}}' > pkg/meta.json
 
           echo "-> Asignando permisos POSIX..."
           chmod -R 755 pkg/
@@ -202,7 +178,6 @@ EOF
         run: |
           echo "-> Generando archivo comprimido .tzst limpio que Bannerlator validará..."
           cd pkg
-          # Cierre del comando tar para incluir d3d, share y meta.json de forma recursiva
           tar -I 'zstd -19 -T0' -cf ../PanVK_kbase_wrapper.tzst *
           cd ..
 
