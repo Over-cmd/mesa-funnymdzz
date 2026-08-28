@@ -23,16 +23,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd patchelf gettext
 
-      # 🟢 CORRECCIÓN HISTÓRICA: Forzamos a Meson a usar los binarios internos y seguros del contenedor Docker
+      # 🟢 CORRECCIÓN DE RUTAS: Apuntamos directamente a las rutas físicas del NDK dentro del Docker de leegao
       - name: Generate Cross-File Template
         run: |
           echo "-> Generando cross-file adaptado al entorno interno de Docker..."
           cat << 'EOF' > android-cross.txt
           [binaries]
-          c = ['aarch64-linux-android30-clang']
-          cpp = ['aarch64-linux-android30-clang++']
-          ar = 'llvm-ar'
-          strip = 'llvm-strip'
+          c = ['/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang']
+          cpp = ['/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++']
+          ar = '/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkgconfig = 'pkg-config'
           
           [host_machine]
@@ -57,11 +57,10 @@ jobs:
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
 
-      # COMPILACIÓN MAESTRA DOCKER: Meson usará el entorno cruzado interno sin colapsar por rutas del host
+      # COMPILACIÓN MAESTRA DOCKER: Ahora Meson encontrará los compiladores del NDK interno sin fallar
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           echo "-> Ejecutando reconfiguración nativa y compilación de wrapper dentro de Docker..."
-          # Se añade la corrección de permisos al final del comando de bash para evitar bloqueos POSIX en el host
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
             rm -rf ${{ env.BUILD_DIR }} && \
@@ -79,7 +78,6 @@ jobs:
             echo "-> Moviendo la librería wrapper nativa al árbol de empaquetado..."
             cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
-            # Usamos el comando strip estándar del sistema para limpiar símbolos de depuración redundantes
             strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
           else
             echo "ERROR: ¡No se encontró la librería libvulkan_wrapper.so en el directorio ${{ env.BUILD_DIR }}!" && exit 1
