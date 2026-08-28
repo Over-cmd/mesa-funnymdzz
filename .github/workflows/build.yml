@@ -87,11 +87,11 @@ jobs:
           rm -rf pkg
           mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d
           
-          echo "-> Extrayendo y renombrando el binario original a la ruta usr/lib..."
+          echo "-> Extrayendo binario original a la ruta usr/lib..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
             cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
             
-            # Usar llvm-strip del NDK para evitar corrupciones de arquitectura cruzada
+            # Usar llvm-strip del NDK
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then
               $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_panfrost_kbase.so
@@ -102,32 +102,21 @@ jobs:
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
 
-      - name: Process ICD Manifest Safely
-        env:
-          ORIG_JSON: "build/src/panfrost/vulkan/panfrost_icd.aarch64.json"
-          DEST_JSON: "pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json"
-        shell: python
-        run: |
-          import os
-          orig_path = os.environ['ORIG_JSON']
-          dest_path = os.environ['DEST_JSON']
-          
-          if os.path.exists(orig_path):
-              with open(orig_path, 'r', encoding='utf-8') as f:
-                  text = f.read()
-              
-              # Reemplazo de texto idéntico al del repositorio original de funnymdzz
-              new_text = text.replace('"library_path": "libvulkan_panfrost.so"', '"library_path": "usr/lib/libvulkan_panfrost_kbase.so"')
-              
-              with open(dest_path, 'w', encoding='utf-8') as f:
-                  f.write(new_text)
-              print("-> Manifiesto ICD procesado de forma nativa en Python sin colisiones de texto.")
-          else:
-              print(f"ERROR: No se encontró {orig_path}")
-              exit(1)
+          # ====================================================================
+          # MÉTODO SEGURO DE REEMPLAZO BASADO EN LA LÓGICA DE LEEGAO
+          # Generamos un manifiesto limpio desde cero mediante una plantilla limpia
+          # ====================================================================
+          echo "-> Generando manifiesto ICD libre de corrupciones..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
+{
+    "file_format_version": "1.0.0",
+    "ICD": {
+        "library_path": "usr/lib/libvulkan_panfrost_kbase.so",
+        "api_version": "1.1.0"
+    }
+}
+EOF
 
-      - name: Finalize permissions and create metadata
-        run: |
           echo "-> Creando archivo meta.json en la raíz del paquete..."
           echo '{"name": "PanVK Panfrost Kbase Mod", "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver", "type": "graphics_driver", "version": "1.0.0", "author": "Mesa Community / Mod", "compatibility": {"min_bannerlator_version": "3.0"}}' > pkg/meta.json
           
