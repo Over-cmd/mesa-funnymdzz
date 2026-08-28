@@ -23,7 +23,7 @@ jobs:
         run: |
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # Automate Sparse Checkout para inyectar dinámicamente la carpeta midgard para tu Mali-G52
+      # Descarga e inyecta dinámicamente el compilador de sombreadores de tu Mali-G52
       - name: Automate Sparse Checkout for Midgard Folder
         run: |
           echo "-> Realizando clonación selectiva de la carpeta de hardware..."
@@ -37,13 +37,10 @@ jobs:
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           ls -la src/panfrost/midgard/meson.build
 
-      # 🟢 REGISTRO NATIVO DE DRIVER: Agrega 'wrapper' a las opciones de Meson para habilitar -Dvulkan-drivers=wrapper
-      - name: Register Wrapper as a Valid Vulkan Driver in Mesa
+      # Redirecciona los archivos C e internos de panfrost hacia la identidad wrapper que agregaste a las opciones
+      - name: Redirect Panfrost Build Logic to Wrapper Identity
         run: |
-          echo "-> Inyectando 'wrapper' en las opciones oficiales de drivers de Mesa..."
-          sed -i "s/choices : \['amd', 'broadcom', 'freedreno', 'intel', 'intel_hasvk', 'panfrost'/choices : \['amd', 'broadcom', 'freedreno', 'intel', 'intel_hasvk', 'wrapper', 'panfrost'/g" meson_options.txt 2>/dev/null || true
-          
-          echo "-> Redireccionando la lógica de compilación de panfrost hacia la identidad wrapper..."
+          echo "-> Redireccionando la lógica de compilación hacia wrapper..."
           sed -i "s/when : 'with_vulkan_icd_panfrost'/when : 'with_vulkan_icd_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
           sed -i "s/with_vulkan_icd_panfrost =/with_vulkan_icd_wrapper =/g" meson.build 2>/dev/null || true
           sed -i "s/'panfrost' in vulkan_drivers/'wrapper' in vulkan_drivers/g" meson.build 2>/dev/null || true
@@ -53,7 +50,7 @@ jobs:
           sed -i "s/name_prefix : 'libvulkan_'/name_prefix : 'libvulkan_'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
           sed -i "s/'vulkan_panfrost'/'vulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
           
-          echo "-> Redireccionando las firmas internas en los archivos C..."
+          echo "-> Redireccionando las firmas de texto en los archivos C..."
           find src/panfrost/vulkan/ -type f -name "*.c" -exec sed -i 's/"panfrost"/"wrapper"/g' {} + 2>/dev/null || true
 
       - name: Patch PanVK vkCreateInstance for Forced Initialization
@@ -101,7 +98,7 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
-          # 🟢 MODIFICACIÓN SOLICITADA: Ahora se llama a -Dvulkan-drivers=wrapper de forma nativa gracias al parche previo
+          # 🟢 CONFIGURACIÓN MAESTRA: Meson ahora llama y procesa -Dvulkan-drivers=wrapper de forma nativa
           meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers="" -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=wrapper -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
 
       - name: Compile Project
@@ -112,6 +109,7 @@ jobs:
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
+          # Buscamos la librería libvulkan_wrapper.so que Meson ahora compila de forma nativa
           TARGET_SO=$(find build/ -name "libvulkan_wrapper.so" | head -n 1)
           if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
             cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
