@@ -82,7 +82,7 @@ jobs:
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
-          # 🟢 CORRECCIÓN 1: Cambiado 'vtn-gen2' por 'vtn-bindgen2' para que Mesa localice la herramienta host correctamente
+          # 🟢 CORRECCIÓN: Restaurado el enlace correcto a vtn-bindgen2 (el comentario anterior pisaba el nombre real requerido)
           ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
@@ -146,7 +146,6 @@ jobs:
           fi
           
           echo "-> Inyectando manifiestos JSON ICD en formato plano compacto para evitar corrupciones de ZArchiver..."
-          # Al usar echo directo eliminamos cualquier sangría o tabulación invisible que rompa el JSON en Android
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
@@ -160,9 +159,8 @@ jobs:
           ls -R pkg
           echo "=============================================="
 
-          cd pkg
-          tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
-          cd ..
+          echo "-> Comprimiendo la estructura dual ingresando de forma nativa con el flag -C..."
+          tar -I 'zstd -19 -T0' -cvf wrapper.tzst -C pkg usr
 
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
