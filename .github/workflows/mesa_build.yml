@@ -19,18 +19,25 @@ jobs:
       - name: Install Zstd Packager
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd patchelf
-      - name: Automate Sparse Checkout for Midgard Folder
+          sudo apt-get install -y zstd patchelf curl
+      
+      # 🟢 CORRECCIÓN DE RED: Descarga directa de la carpeta midgard sin usar git clone para evitar el error 128
+      - name: Automate Sparse Extraction for Midgard Folder
         run: |
-          echo "-> Realizando clonación selectiva de la carpeta de hardware..."
+          echo "-> Descargando exclusivamente la carpeta de hardware desde el repositorio estable..."
           rm -rf src/panfrost/midgard
-          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
-          cd /tmp/gamenative-src
-          git sparse-checkout set src/panfrost/midgard
-          cd $GITHUB_WORKSPACE
-          cp -r /tmp/gamenative-src/src/panfrost/midgard src/panfrost/
-          rm -rf /tmp/gamenative-src
+          mkdir -p src/panfrost/midgard
+          
+          # Descarga el tarball de la rama wrapper-25 y extrae únicamente la subcarpeta midgard
+          curl -sL "https://github.com" | \
+          tar -xzf - --strip-components=3 "gamenative-wrapper-wrapper-25/src/panfrost/midgard" -C src/panfrost/midgard
+          
+          echo "-> Forzando la inyección de subdirectorio en src/panfrost/meson.build..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
+          
+          echo "-> Estructura inyectada con éxito:"
+          ls -la src/panfrost/midgard/meson.build
+
       - name: Redirect Panfrost Build Logic to Wrapper Identity
         run: |
           echo "-> Redireccionando la lógica de compilación hacia wrapper..."
