@@ -86,7 +86,7 @@ jobs:
           echo "-> Inicializando empaquetado estructural solicitado (usr/lib y usr/share)..."
           rm -rf pkg
           
-          # Creamos estrictamente la estructura raíz solicitada: usr/lib y usr/share/vulkan/icd.d
+          # Estructura raíz: usr/lib y usr/share/vulkan/icd.d
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
@@ -105,12 +105,13 @@ jobs:
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
           
-          echo "-> Vinculando el manifiesto ICD directamente en usr/share/vulkan/icd.d..."
+          echo "-> Vinculando y renombrando el manifiesto ICD solicitado..."
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
-            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+            # Corregido: Ahora se renombra exactamente a libvulkan_panfrost_kbase.aarch64.json
+            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
             
-            # Modificación de la ruta interna del JSON para que apunte exactamente al nuevo binario cargado en Linux
-            sed -i 's|"library_path":.*|"library_path": "usr/lib/libvulkan_panfrost_kbase.so"|g' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+            # Modificación de la ruta interna del JSON para apuntar al binario
+            sed -i 's|"library_path":.*|"library_path": "usr/lib/libvulkan_panfrost_kbase.so"|g' pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json
           else
             echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
           fi
@@ -128,7 +129,6 @@ jobs:
         run: |
           echo "-> Generando archivo comprimido .tzst con raíz usr/ y meta.json..."
           cd pkg
-          # tar empaqueta todo lo que está dentro de pkg, dejando a 'usr/' y 'meta.json' directamente en la raíz del .tzst
           tar -I 'zstd -19 -T0' -cf ../PanVK_kbase_wrapper.tzst *
           cd ..
 
