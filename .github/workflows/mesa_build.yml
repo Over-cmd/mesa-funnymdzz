@@ -119,67 +119,38 @@ jobs:
 
       - name: Structure and Pack wrapper.tzst for Bannerlator
         run: |
-          echo "-> Inicializando empaquetado estructural..."
+          echo "-> Inicializando empaquetado estructural con nombres originales..."
           rm -rf pkg
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
-          echo "-> Extrayendo binario binario desde build/..."
+          echo "-> Copiando driver con su nombre nativo original..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost.so
           else
-            echo "-> Intento de rastreo secundario de binarios Vulkan..."
             FOUND_SO=$(find build/ -type f -name "libvulkan_panfrost.so" -o -name "libvulkan_panvk.so" | head -n 1)
             if [ -n "$FOUND_SO" ]; then
-              cp -v "$FOUND_SO" pkg/usr/lib/libvulkan_panfrost_kbase.so
+              cp -v "$FOUND_SO" pkg/usr/lib/libvulkan_panfrost.so
             else
               echo "ERROR: ¡No se encontró la librería .so compilada!" && exit 1
             fi
           fi
 
-          echo "-> Escribiendo manifiestos ICD JSON de forma segura..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-          {
-              "ICD": {
-                  "api_version": "1.4.352",
-                  "library_arch": "64",
-                  "library_path": "libvulkan_panfrost_kbase.so"
-              },
-              "file_format_version": "1.0.1"
-          }
-          EOF
-
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
-          {
-              "ICD": {
-                  "api_version": "1.4.352",
-                  "library_arch": "32",
-                  "library_path": "libvulkan_panfrost_kbase.so"
-              },
-              "file_format_version": "1.0.1"
-          }
-          EOF
-
-          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          echo "-> Creando manifiestos JSON ICD originales sin alteraciones..."
+          echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_panfrost.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
+          echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_panfrost.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
           
-          echo "-> Configurando permisos POSIX..."
+          echo "-> Configurando permisos POSIX universales..."
           chmod 755 pkg/usr pkg/usr/lib pkg/usr/share pkg/usr/share/vulkan pkg/usr/share/vulkan/icd.d
-          chmod 644 pkg/usr/lib/libvulkan_panfrost_kbase.so
-          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          chmod 644 pkg/usr/lib/libvulkan_panfrost.so
+          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
+          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
 
-          echo "=== Contenido Estructural del Paquete ==="
+          echo "=== Verificación del Contenido Original ==="
           ls -R pkg
-          echo "========================================="
+          echo "=========================================="
           
-          echo "-> Comprimiendo estructura dual en wrapper.tzst..."
+          echo "-> Comprimiendo estructura limpia en wrapper.tzst..."
           cd pkg
           tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
           cd ..
-
-      - name: Upload Final wrapper.tzst for Bannerlator
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bannerlator-Mali-NDK-Wrapper
-          path: wrapper.tzst
