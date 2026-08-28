@@ -16,9 +16,10 @@ jobs:
       - name: Patch anon_file.c for memfd_create
         run: |
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
-      - name: Automate Sparse Checkout for Midgard Folder
+      # 🟢 EXTRAE MIDGARD DIRECTAMENTE DE TU REPOSITORIO GAMENATIVE-WRAPPER
+      - name: Automate Sparse Checkout for Midgard Folder from your Repo
         run: |
-          echo "-> Realizando clonación selectiva de la carpeta de hardware..."
+          echo "-> Realizando clonación selectiva de la carpeta de hardware desde tu repositorio..."
           rm -rf src/panfrost/midgard
           git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
           cd /tmp/gamenative-src
@@ -80,7 +81,6 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
-          # 🟢 COMPILACIÓN MAESTRA: Meson ahora llama a wrapper nativamente gracias a tu cambio en meson.options
           meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers="" -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=wrapper -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
       - name: Compile Project
         run: |
