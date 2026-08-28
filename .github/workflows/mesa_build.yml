@@ -40,13 +40,13 @@ jobs:
           echo "-> Registrando subdirectorio en src/panfrost/meson.build..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           
-          echo "-> Corrigiendo variables de cabecera heredadas en el build de lib..."
-          sed -i 's/inc_panfrost_hw/inc_panfrost/g' src/panfrost/lib/meson.build 2>/dev/null || true
+          # 🟢 CORRECCIÓN ULTRA-GLOBAL: Reemplaza inc_panfrost_hw por inc_panfrost en todos los archivos de configuración inyectados
+          echo "-> Corrigiendo de forma masiva las variables de cabecera heredadas..."
+          find src/panfrost/ -name "meson.build" -exec sed -i 's/inc_panfrost_hw/inc_panfrost/g' {} + 2>/dev/null || true
           
           echo "-> Corrigiendo dependencias estáticas antiguas del compilador y enlazador..."
           sed -i 's/libpanfrost_midgard/libpanfrost_shared/g' src/panfrost/lib/meson.build 2>/dev/null || true
           sed -i 's/libpanfrost_compiler/libpanfrost_shared/g' src/panfrost/lib/meson.build 2>/dev/null || true
-          # 🟢 NUEVA CORRECCIÓN: Unificar la lógica antigua de Bifrost en libpanfrost_lib
           sed -i 's/libpanfrost_bifrost/libpanfrost_lib/g' src/panfrost/lib/meson.build 2>/dev/null || true
           
           ls -la src/panfrost/midgard/meson.build
