@@ -28,6 +28,18 @@ jobs:
           rm -rf /tmp/gamenative-src
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           ls -la src/panfrost/midgard/meson.build
+      - name: Redirect Panfrost Build Logic to Wrapper Identity natively
+        run: |
+          echo "-> Redireccionando la lógica de compilación de panfrost hacia la identidad wrapper..."
+          sed -i "s/when : 'with_vulkan_icd_panfrost'/when : 'with_vulkan_icd_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
+          sed -i "s/with_vulkan_icd_panfrost =/with_vulkan_icd_wrapper =/g" meson.build 2>/dev/null || true
+          sed -i "s/'panfrost' in vulkan_drivers/'wrapper' in vulkan_drivers/g" meson.build 2>/dev/null || true
+          echo "-> Cambiando el nombre de salida del binario en las entrañas de Meson..."
+          sed -i "s/output : 'libvulkan_panfrost'/output : 'libvulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
+          sed -i "s/name_prefix : 'libvulkan_'/name_prefix : 'libvulkan_'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
+          sed -i "s/'vulkan_panfrost'/'vulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
+          echo "-> Redireccionando firmas de texto internas en archivos C..."
+          find src/panfrost/vulkan/ -type f -name "*.c" -exec sed -i 's/"panfrost"/"wrapper"/g' {} + 2>/dev/null || true
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           PANVK_DEVICE=$(find src/ -name "*device.c" | head -n 1)
@@ -68,21 +80,22 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
-          meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers="" -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=panfrost -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
+          # 🟢 COMPILACIÓN MAESTRA: Meson ahora llama a wrapper nativamente gracias a tu cambio en meson.options
+          meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers="" -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=wrapper -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
       - name: Compile Project
         run: |
           meson compile -C build --jobs 2
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
-          TARGET_SO=$(find build/ -name "libvulkan_panfrost.so" | head -n 1)
+          TARGET_SO=$(find build/ -name "libvulkan_wrapper.so" | head -n 1)
           if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
             cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; else strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; fi
           else
-            echo "ERROR: ¡No se encontró la librería libvulkan_panfrost.so generada!" && exit 1
+            echo "ERROR: ¡No se encontró la librería libvulkan_wrapper.so generada de forma nativa!" && exit 1
           fi
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
