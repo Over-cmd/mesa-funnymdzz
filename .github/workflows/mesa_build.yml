@@ -35,15 +35,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Build Dependencies
+       - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
             llvm-dev \
             libclang-dev \
-            libclc-dev \
-            libllvmspirvlib-dev \
             libelf-dev \
             spirv-tools \
             bison \
@@ -53,6 +51,16 @@ jobs:
             gettext \
             cargo \
             rustc
+
+          # Detectamos dinámicamente la versión mayor de LLVM instalada en el entorno (ej. 18 o 19)
+          LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
+          echo "-> Detectada versión de LLVM: ${LLVM_MAJOR}"
+
+          # Instalamos los candidatos específicos correspondientes a esa versión de LLVM
+          sudo apt-get install -y \
+            "libclc-${LLVM_MAJOR}-dev" \
+            "libllvmspirvlib-${LLVM_MAJOR}-dev" \
+            "libclang-${LLVM_MAJOR}-dev"
 
           python -m pip install --upgrade pip
           pip install mako PyYAML 'meson>=1.4.0' ninja packaging
