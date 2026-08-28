@@ -43,8 +43,10 @@ jobs:
           echo "-> Corrigiendo variables de cabecera heredadas en el build de lib..."
           sed -i 's/inc_panfrost_hw/inc_panfrost/g' src/panfrost/lib/meson.build 2>/dev/null || true
           
-          echo "-> Corrigiendo dependencia estática del compilador Midgard..."
-          sed -i 's/libpanfrost_midgard/libpanfrost_compiler/g' src/panfrost/lib/meson.build 2>/dev/null || true
+          # 🟢 CORRECCIÓN LOGICIAL: Enlazar el compilador antiguo dentro de la macro compartida libpanfrost_shared
+          echo "-> Corrigiendo enlazador estático de Midgard hacia libpanfrost_shared..."
+          sed -i 's/libpanfrost_midgard/libpanfrost_shared/g' src/panfrost/lib/meson.build 2>/dev/null || true
+          sed -i 's/libpanfrost_compiler/libpanfrost_shared/g' src/panfrost/lib/meson.build 2>/dev/null || true
           
           ls -la src/panfrost/midgard/meson.build
 
@@ -106,7 +108,6 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
-          # 🟢 MODIFICACIÓN SOLICITADA: Meson compila -Dvulkan-drivers=wrapper directo desde las opciones nativas fijas
           meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers="" -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=wrapper -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
       
       - name: Compile Project
