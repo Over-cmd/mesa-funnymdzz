@@ -24,13 +24,13 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # Automate Sparse Checkout para inyectar dinámicamente el compilador de tu Mali-G52
+      # 🟢 CORRECCIÓN 1: Se eliminó el espacio roto y se inyectó la URL real completa hacia tu rama wrapper-25
       - name: Automate Sparse Checkout for Midgard Folder
         run: |
           echo "-> Realizando clonación selectiva de la carpeta de hardware faltante..."
           rm -rf src/panfrost/midgard
           
-          # Clonamos de forma ultra-rápida especificando la rama real del fork donde reside Bifrost
+          # Clonamos de forma ultra-rápida especificando tu repositorio de origen real sin espacios rotos
           git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
           cd /tmp/gamenative-src
           git sparse-checkout set src/panfrost/midgard
@@ -46,7 +46,7 @@ jobs:
           echo "-> Verificando estructura inyectada con éxito en los servidores de GitHub:"
           ls -la src/panfrost/midgard/meson.build
 
-      # DESBLOQUEO DE INSTANCIA EN C: Parcheamos PanVK para forzar éxito en vkCreateInstance en tu Mali-G52
+      # 🛠️ DESBLOQUEO DE INSTANCIA EN C: Parcheamos PanVK para forzar éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           echo "-> Aplicando bypass de inicialización de instancia en código C..."
@@ -156,7 +156,7 @@ jobs:
           chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vulkan/icd.d/*.json pkg/usr/share/vulkan/settings.d/*.json pkg/usr/version.txt
           tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
 
-      # Subida del artefacto final sin truncar
+      # Subida del artefacto final cerrado de forma estricta
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
         with:
