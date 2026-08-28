@@ -13,30 +13,31 @@ jobs:
     steps:
       - name: Checkout repository actual (mesa-funnymdzz)
         uses: actions/checkout@v4
+
       - name: Patch anon_file.c for memfd_create
         run: |
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
       
-      # 🟢 CORRECCIÓN DE RED INDESTRUCTIBLE: Inyección multi-carpeta usando el Tarball de GitHub sin comandos git clone
-      - name: Automate Sparse Extraction for Bifrost Ecosystem from your Repo
+      # 🟢 SOLUCIÓN DEFINITIVA DE RED: Clonación interna nativa mediante Checkout dirigida a directorio temporal
+      - name: Checkout Bifrost Ecosystem from gamenative-wrapper
+        uses: actions/checkout@v4
+        with:
+          repository: 'Over-cmd/gamenative-wrapper'
+          ref: 'wrapper-25'
+          path: 'tmp_gamenative'
+
+      # Tras la descarga segura del checkout, soldamos las carpetas físicas dentro de src/panfrost/
+      - name: Inject Bifrost Ecosystem Folders
         run: |
           echo "-> Limpiando directorios modernos e incompletos..."
           rm -rf src/panfrost/midgard src/panfrost/compiler src/panfrost/include src/panfrost/lib
-          mkdir -p src/panfrost/midgard src/panfrost/compiler src/panfrost/include src/panfrost/lib
           
-          echo "-> Descargando y extrayendo el ecosistema Bifrost completo de tu rama estable..."
-          curl -sL "https://github.com" | \
-          tar -xzf - --strip-components=3 \
-            "gamenative-wrapper-wrapper-25/src/panfrost/midgard" \
-            "gamenative-wrapper-wrapper-25/src/panfrost/compiler" \
-            "gamenative-wrapper-wrapper-25/src/panfrost/include" \
-            "gamenative-wrapper-wrapper-25/src/panfrost/lib"
-          
-          # Movemos los archivos extraídos en la raíz temporal hacia sus carpetas correspondientes en src/panfrost/
-          mv midgard/* src/panfrost/midgard/ && rm -rf midgard
-          mv compiler/* src/panfrost/compiler/ && rm -rf compiler
-          mv include/* src/panfrost/include/ && rm -rf include
-          mv lib/* src/panfrost/lib/ && rm -rf lib
+          echo "-> Moviendo el ecosistema Bifrost completo al árbol de compilación actual..."
+          cp -r tmp_gamenative/src/panfrost/midgard src/panfrost/
+          cp -r tmp_gamenative/src/panfrost/compiler src/panfrost/
+          cp -r tmp_gamenative/src/panfrost/include src/panfrost/
+          cp -r tmp_gamenative/src/panfrost/lib src/panfrost/
+          rm -rf tmp_gamenative
           
           echo "-> Registrando subdirectorio en src/panfrost/meson.build..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
@@ -45,7 +46,7 @@ jobs:
           sed -i 's/inc_panfrost_hw/inc_panfrost/g' src/panfrost/lib/meson.build 2>/dev/null || true
           
           ls -la src/panfrost/midgard/meson.build
-      
+
       - name: Redirect Panfrost Build Logic to Wrapper Identity natively
         run: |
           echo "-> Redireccionando la lógica de compilación de panfrost hacia la identidad wrapper..."
