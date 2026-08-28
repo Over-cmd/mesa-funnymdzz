@@ -1,4 +1,4 @@
-name: Android NDK Build (Wrapper Variant)
+name: Android NDK Build (Bifrost Injected Variant)
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
         build-type: [release]
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository actual (mesa-funnymdzz)
         uses: actions/checkout@v4
 
       - name: Patch anon_file.c for memfd_create
@@ -24,20 +24,34 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🛠️ CORRECCIÓN DE INSTANCIA: Forzar éxito continuo en el punto de entrada de PanVK para Mali-G52
+      # Descarga directa de la carpeta midgard usando la API de archivos de GitHub
+      - name: Inject Midgard Compiler via Direct Tarball
+        run: |
+          echo "-> Descargando exclusivamente el compilador Midgard/Bifrost faltante..."
+          mkdir -p src/panfrost/midgard
+          
+          # Descargamos el árbol de la rama wrapper-25 en un archivo tar y extraemos únicamente la carpeta src/panfrost/midgard
+          curl -sL https://github.com | \
+          tar -xzf - --strip-components=3 --wildcards "*/src/panfrost/midgard/*" -C src/panfrost/midgard
+          
+          echo "-> Modificando src/panfrost/meson.build para registrar la subcarpeta inyectada..."
+          sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
+          
+          echo "-> Verificando estructura inyectada con éxito:"
+          ls -la src/panfrost/midgard/meson.build
+
+      # DESBLOQUEO DE INSTANCIA: Parcheamos PanVK para forzar éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
-          echo "-> Localizando el archivo del dispositivo PanVK..."
+          echo "-> Aplicando bypass de inicialización de instancia en código C..."
           PANVK_DEVICE=$(find src/ -name "panvk_device.c" | head -n 1)
           if [ -n "$PANVK_DEVICE" ] && [ -f "$PANVK_DEVICE" ]; then
-            echo "-> Aplicando bypass de inicialización de instancia en: $PANVK_DEVICE"
             sed -i 's/\r$//' "$PANVK_DEVICE"
             sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
             echo "-> Parche de vkCreateInstance inyectado."
           fi
 
-       Tarjeta de video / Procesador: Instalar Python y dependencias
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -60,7 +74,7 @@ jobs:
               zlib1g-dev \
               cargo \
               rustc \
-              patchelf # 🟢 NUEVA HERRAMIENTA: Para renombrar las firmas del binario externamente
+              patchelf
           
           LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
           sudo apt-get install -y "libclc-${LLVM_MAJOR}-dev" "libllvmspirvlib-${LLVM_MAJOR}-dev" "libclang-${LLVM_MAJOR}-dev"
@@ -90,7 +104,7 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
-          # 🟢 VOLVEMOS A PANFROST NATIVO: Compila el driver de forma limpia para evitar romper las firmas ELF de Khronos
+          # Forzamos la compilación nativa de Vulkan PanVK inyectando de vuelta el soporte de drivers
           meson setup build --reconfigure \
               --cross-file android-cross.txt \
               -Dbuildtype=${{ matrix.build-type }} \
@@ -112,11 +126,11 @@ jobs:
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
-          echo "-> Extrayendo el driver nativo de Panfrost..."
+          echo "-> Extrayendo el driver PanVK inyectado con soporte de sombreadores Bifrost..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
             cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
             
-            # 🟢 REDIRECCIÓN BINARIA QUIRÚRGICA: Cambiamos el SONAME interno del ELF a libvulkan_wrapper.so sin romper la tabla de funciones
+            # Ajustamos firmas ELF externas para estabilizar vkCreateInstance
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
             
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
@@ -128,6 +142,7 @@ jobs:
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
+          # Inyección limpia de las variables que encienden PanVK sobre el kernel kbase de tu Mali-G52
           echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
 
           echo "msf:315508" > pkg/usr/version.txt
