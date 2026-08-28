@@ -24,7 +24,7 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 SUSTITUCIÓN NATIVA DEL DRIVER: Cambia el nombre de compilación interno de Panfrost a Wrapper
+      # SUSTITUCIÓN NATIVA DEL DRIVER: Cambia el nombre de compilación interno de Panfrost a Wrapper
       - name: Native Driver Rename from Panfrost to Wrapper
         run: |
           echo "-> Forzando a Meson a compilar el driver con identidad Wrapper de forma nativa..."
@@ -32,7 +32,6 @@ jobs:
           sed -i 's/name_prefix : '\''libvulkan_panfrost'\''/name_prefix : '\''libvulkan_wrapper'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
           sed -i 's/'\''vulkan_panfrost'\''/'\''vulkan_wrapper'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
 
-       Tarjeta de video / Procesador: Instalar Python y dependencias
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -177,7 +176,7 @@ jobs:
           echo "=============================================="
 
           echo "-> Comprimiendo la estructura dual ingresando de forma nativa con el flag -C..."
-          tar -I 'zstd -19 -T0' -cvf wrapper.tzst -C pkg usr
+          tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
 
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
