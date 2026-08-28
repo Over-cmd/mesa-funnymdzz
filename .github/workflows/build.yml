@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-android-wrapper:
-    runs-on: ubuntu-latest  # Entorno estándar universalmente compatible
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         build-type: [release]
@@ -82,9 +82,6 @@ jobs:
           meson compile -C build
 
       - name: Stage runtime files for Bannerlator
-        env:
-          ORIG_JSON: "build/src/panfrost/vulkan/panfrost_icd.aarch64.json"
-          DEST_JSON: "pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json"
         run: |
           echo "-> Inicializando empaquetado estructural solicitado (usr/lib y usr/share)..."
           rm -rf pkg
@@ -105,23 +102,32 @@ jobs:
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
 
-          echo "-> Reemplazando la ruta de la librería en el manifiesto ICD emulando el script original..."
-          if [ -f "$ORIG_JSON" ]; then
-            # Se genera el archivo destino de forma plana usando código limpio en Python
-            python3 -c "
-with open('$ORIG_JSON', 'r') as f:
-    text = f.read()
-# Reemplazamos la clave tal y como lo hace Mesa de forma exacta para evitar corrupciones de EOF
-new_text = text.replace('\"library_path\": \"libvulkan_panfrost.so\"', '\"library_path\": \"usr/lib/libvulkan_panfrost_kbase.so\"')
-with open('$DEST_JSON', 'w') as f:
-    f.write(new_text)
-"
-            echo "-> Manifiesto ICD generado correctamente. Contenido:"
-            cat "$DEST_JSON"
-          else
-            echo "ERROR: ¡No se encontró el manifiesto original panfrost_icd.aarch64.json!" && exit 1
-          fi
+      - name: Process ICD Manifest Safely
+        env:
+          ORIG_JSON: "build/src/panfrost/vulkan/panfrost_icd.aarch64.json"
+          DEST_JSON: "pkg/usr/share/vulkan/icd.d/libvulkan_panfrost_kbase.aarch64.json"
+        shell: python
+        run: |
+          import os
+          orig_path = os.environ['ORIG_JSON']
+          dest_path = os.environ['DEST_JSON']
+          
+          if os.path.exists(orig_path):
+              with open(orig_path, 'r', encoding='utf-8') as f:
+                  text = f.read()
+              
+              # Reemplazo de texto idéntico al del repositorio original de funnymdzz
+              new_text = text.replace('"library_path": "libvulkan_panfrost.so"', '"library_path": "usr/lib/libvulkan_panfrost_kbase.so"')
+              
+              with open(dest_path, 'w', encoding='utf-8') as f:
+                  f.write(new_text)
+              print("-> Manifiesto ICD procesado de forma nativa en Python sin colisiones de texto.")
+          else:
+              print(f"ERROR: No se encontró {orig_path}")
+              exit(1)
 
+      - name: Finalize permissions and create metadata
+        run: |
           echo "-> Creando archivo meta.json en la raíz del paquete..."
           echo '{"name": "PanVK Panfrost Kbase Mod", "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver", "type": "graphics_driver", "version": "1.0.0", "author": "Mesa Community / Mod", "compatibility": {"min_bannerlator_version": "3.0"}}' > pkg/meta.json
           
