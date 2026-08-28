@@ -19,7 +19,6 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-       Tarjeta de video / Procesador: Instalar Python y dependencias
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -100,7 +99,7 @@ jobs:
           mkdir -p pkg/usr/lib
           mkdir -p pkg/usr/share/vulkan/icd.d
           
-          echo "-> Renombrando y moviendo el archivo .so a libvulkan_wrapper.so para permitir la instalación..."
+          echo "-> Moviendo y renombrando el archivo .so a libvulkan_wrapper.so..."
           cp build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
           
           echo "-> Inyectando el manifiesto JSON con los nombres obligatorios del Wrapper original..."
