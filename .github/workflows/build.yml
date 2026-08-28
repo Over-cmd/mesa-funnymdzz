@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-android-wrapper:
-    runs-on: ubuntu-24.04-arm # Usamos ARM para acelerar la compilación cruzada del NDK de forma nativa
+    runs-on: ubuntu-latest  # Entorno estándar universalmente compatible
     strategy:
       matrix:
         build-type: [release]
@@ -134,6 +134,9 @@ jobs:
           meson compile -C build
 
       - name: Stage runtime files for Bannerlator
+        env:
+          TARGET_JSON_PATH: "pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json"
+          TARGET_LIB_PATH: "d3d/system32/libvulkan_panfrost_kbase.so"
         run: |
           echo "-> Inicializando empaquetado estructural con arquitectura compatible para Bannerlator..."
           rm -rf pkg
@@ -153,16 +156,21 @@ jobs:
           echo "-> Vinculando el manifiesto ICD directamente en el árbol interno..."
           mkdir -p pkg/share/vulkan/icd.d
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
-            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" "$TARGET_JSON_PATH"
             
-            # Modificación correcta usando sys.argv
-            python3 - pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json "d3d/system32/libvulkan_panfrost_kbase.so" <<'PY'
-import json, sys
-json_path = sys.argv[1]
-lib_path = sys.argv[2]
+            # Ejecución limpia de Python usando variables de entorno seguras (Evita fallos de parsing de Bash en YAML)
+            python3 <<'PY'
+import json
+import os
+
+json_path = os.environ["TARGET_JSON_PATH"]
+lib_path = os.environ["TARGET_LIB_PATH"]
+
 with open(json_path, encoding="utf-8") as s:
     m = json.load(s)
+
 m["ICD"]["library_path"] = lib_path
+
 with open(json_path, "w", encoding="utf-8") as o:
     json.dump(m, o, indent=4)
     o.write("\n")
