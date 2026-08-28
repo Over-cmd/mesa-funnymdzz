@@ -24,7 +24,7 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 PARCHE DE HARDWARE: Forzar al código C de PanVK a aceptar e inicializar la arquitectura Bifrost (Mali-G52)
+      # 🛠️ PARCHE DE HARDWARE BIFROST: Forzar inicialización de hardware en código C para Mali-G52
       - name: Patch PanVK Source Code for Bifrost Force Activation
         run: |
           echo "-> Buscando el archivo de inicialización del dispositivo PanVK..."
@@ -33,11 +33,8 @@ jobs:
           if [ -n "$PANVK_DEVICE" ] && [ -f "$PANVK_DEVICE" ]; then
             echo "-> Rompiendo el bloqueo de conformidad de hardware en: $PANVK_DEVICE"
             sed -i 's/\r$//' "$PANVK_DEVICE"
-            # Reemplaza la verificación de extensiones restrictiva por un valor verdadero continuo
             sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
-            echo "-> Parche de código de hardware inyectado."
           else
-            echo "-> ATENCIÓN: No se encontró panvk_device.c, buscando alternativas en panvk_vulkan.c..."
             PANVK_VULKAN=$(find src/ -name "panvk_vulkan.c" | head -n 1)
             if [ -n "$PANVK_VULKAN" ] && [ -f "$PANVK_VULKAN" ]; then
               sed -i 's/\r$//' "$PANVK_VULKAN"
@@ -45,10 +42,14 @@ jobs:
             fi
           fi
 
-      # SUSTITUCIÓN NATIVA DEL DRIVER: Cambia el nombre de compilación interno de Panfrost a Wrapper
+      # 🟢 SUSTITUCIÓN NATIVA PANVK/PANFROST: Forzar la identidad 'wrapper' en las entrañas del driver Vulkan
       - name: Native Driver Rename from Panfrost to Wrapper
         run: |
-          echo "-> Forzando a Meson a compilar el driver con identidad Wrapper de forma nativa..."
+          echo "-> Redireccionando las firmas internas de PanVK de panfrost a wrapper..."
+          # Esto modifica el punto de entrada de la extensión Vulkan para que Winlator enlace PanVK bajo el nombre wrapper_icd
+          find src/panfrost/vulkan/ -type f -name "*.c" -exec sed -i 's/"panfrost"/"wrapper"/g' {} + 2>/dev/null || true
+          
+          echo "-> Forzando a Meson a compilar el binario con identidad Wrapper..."
           sed -i 's/output : '\''libvulkan_panfrost.so'\''/output : '\''libvulkan_wrapper.so'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
           sed -i 's/name_prefix : '\''libvulkan_panfrost'\''/name_prefix : '\''libvulkan_wrapper'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
           sed -i 's/'\''vulkan_panfrost'\''/'\''vulkan_wrapper'\''/g' src/panfrost/vulkan/meson.build 2>/dev/null || true
@@ -77,13 +78,7 @@ jobs:
               rustc
           
           LLVM_MAJOR="$(llvm-config --version | cut -d. -f1)"
-          echo "-> Detectada versión de LLVM del sistema: ${LLVM_MAJOR}"
-
-          sudo apt-get install -y \
-              "libclc-${LLVM_MAJOR}-dev" \
-              "libllvmspirvlib-${LLVM_MAJOR}-dev" \
-              "libclang-${LLVM_MAJOR}-dev"
-
+          sudo apt-get install -y "libclc-${LLVM_MAJOR}-dev" "libllvmspirvlib-${LLVM_MAJOR}-dev" "libclang-${LLVM_MAJOR}-dev"
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
@@ -94,19 +89,8 @@ jobs:
 
       - name: Generate Host Tools
         run: |
-          echo "-> Configurando herramientas de compilación nativa de host..."
-          meson setup build-host \
-              -Dplatforms=[] \
-              -Dgallium-drivers=[] \
-              -Dvulkan-drivers=[] \
-              -Dtools=panfrost \
-              -Dprecomp-compiler=enabled \
-              -Dinstall-precomp-compiler=true \
-              -Dllvm=enabled \
-              -Dmesa-clc=enabled -Dinstall-mesa-clc=true
-              
+          meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
-          
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
           ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
@@ -127,19 +111,9 @@ jobs:
               -Dandroid-stub=true \
               -Dandroid-libbacktrace=disabled \
               -Dplatform-sdk-version=30 \
-              -Dglx=disabled \
-              -Dgbm=disabled \
-              -Degl=disabled \
-              -Dopengl=false \
-              -Dgles1=disabled \
-              -Dgles2=disabled \
-              -Dglvnd=disabled \
-              -Dvalgrind=disabled \
+              -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled \
               -Dgallium-drivers="" \
-              -Dshared-glapi=disabled \
-              -Dzstd=disabled \
-              -Dmesa-clc=system \
-              -Dprecomp-compiler=system \
+              -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system \
               -Dvulkan-drivers=panfrost \
               -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
 
@@ -149,41 +123,25 @@ jobs:
 
       - name: Structure and Pack wrapper.tzst
         run: |
-          echo "-> Limpiando estructuras previas..."
-          rm -rf pkg
-          mkdir -p pkg/usr/lib
-          mkdir -p pkg/usr/share/vulkan/icd.d
-          mkdir -p pkg/usr/share/vulkan/settings.d
+          rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
-          echo "-> Moviendo el binario generado de forma nativa..."
           TARGET_SO=$(find build/ -name "libvulkan_wrapper.so" | head -n 1)
           if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
             cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
-            
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
-            if [ -f "$STRIP_BIN" ]; then
-              $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
-            else
-              strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
-            fi
+            if [ -f "$STRIP_BIN" ]; then $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; else strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; fi
           else
-            echo "ERROR: ¡No se encontró la librería compilada libvulkan_wrapper.so nativa!" && exit 1
+            echo "ERROR: ¡No se encontró libvulkan_wrapper.so!" && exit 1
           fi
           
-          echo "-> Inyectando manifiestos JSON ICD limpios y optimizados..."
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
-          echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
+          # 🟢 Inyección obligatoria de variables para despertar PanVK y enlazar Panfrost de forma simultánea
+          echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
 
           echo "msf:315508" > pkg/usr/version.txt
-
-          chmod -R 755 pkg/
-          chmod 644 pkg/usr/lib/libvulkan_wrapper.so
-          chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-          chmod 644 pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
-          chmod 644 pkg/usr/version.txt
-
+          chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vulkan/icd.d/*.json pkg/usr/version.txt
           tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
 
       - name: Upload Final wrapper.tzst
