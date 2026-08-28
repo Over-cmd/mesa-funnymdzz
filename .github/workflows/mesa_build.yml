@@ -1,0 +1,185 @@
+name: PanVK kbase wrapper release
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-wrapper:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-type: [release]
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Patch Drivers and anon_file
+        run: |
+          echo "-> Aplicando parches de compatibilidad para Android..."
+          if [ -f "src/util/anon_file.c" ]; then
+            sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+          fi
+          
+          echo "-> Aplicando parche automático de core count a pan_device.c..."
+          find . -name "pan_device.c" -exec sed -i 's/pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_id_range = pan_query_core_count(\&dev->kmod.dev->props);/g' {} +
+          find . -name "pan_device.c" -exec sed -i 's/\\&/\&/g' {} +
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            llvm-19-dev \
+            libclang-19-dev \
+            libclc-19-dev \
+            libllvmspirvlib-19-dev \
+            libelf-dev \
+            spirv-tools \
+            bison \
+            flex \
+            libdrm-dev \
+            pkg-config \
+            gettext
+
+          python -m pip install --upgrade pip
+          pip install mako PyYAML 'meson>=1.4.0' ninja packaging
+
+      - name: Build Host Tools
+        run: |
+          echo "-> Compilando herramientas nativas de host (x86_64)..."
+          meson setup build-host \
+            -Dplatforms=[] \
+            -Dgallium-drivers=[] \
+            -Dvulkan-drivers=[] \
+            -Dtools=panfrost \
+            -Dprecomp-compiler=enabled \
+            -Dinstall-precomp-compiler=true \
+            -Dllvm=enabled \
+            -Dmesa-clc=enabled \
+            -Dinstall-mesa-clc=true
+            
+          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
+          
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
+          
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
+
+      - name: Configure Cross-Compilation (Meson NDK)
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
+          
+          echo "-> Procesando android.toml con envsubst..."
+          envsubst < android.toml > android-cross.txt
+          
+          meson setup build --reconfigure \
+            --cross-file android-cross.txt \
+            -Dbuildtype=${{ matrix.build-type }} \
+            -Dplatforms=android \
+            -Dandroid-stub=true \
+            -Dandroid-libbacktrace=disabled \
+            -Dplatform-sdk-version=30 \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Degl=disabled \
+            -Dopengl=false \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Dglvnd=disabled \
+            -Dvalgrind=disabled \
+            -Dgallium-drivers=[] \
+            -Dshared-glapi=disabled \
+            -Dzstd=disabled \
+            -Dmesa-clc=system \
+            -Dprecomp-compiler=system \
+            -Dvulkan-drivers=panfrost \
+            -Dllvm=disabled \
+            -Dpanfrost-kmds=kbase,panthor
+
+      - name: Compile Project
+        run: |
+          echo "-> Compilando driver PanVK para Android ARM64..."
+          meson compile -C build
+
+      - name: Structure and Pack wrapper.tzst for Bannerlator
+        run: |
+          echo "-> Inicializando empaquetado estructural..."
+          rm -rf pkg
+          mkdir -p pkg/usr/lib
+          mkdir -p pkg/usr/share/vulkan/icd.d
+          
+          echo "-> Extrayendo binario binario desde build/..."
+          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
+          else
+            echo "-> Intento de rastreo secundario de binarios Vulkan..."
+            FOUND_SO=$(find build/ -type f -name "libvulkan_panfrost.so" -o -name "libvulkan_panvk.so" | head -n 1)
+            if [ -n "$FOUND_SO" ]; then
+              cp -v "$FOUND_SO" pkg/usr/lib/libvulkan_panfrost_kbase.so
+            else
+              echo "ERROR: ¡No se encontró la librería .so compilada!" && exit 1
+            fi
+          fi
+
+          echo "-> Escribiendo manifiestos ICD JSON de forma segura..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+          {
+              "ICD": {
+                  "api_version": "1.4.352",
+                  "library_arch": "64",
+                  "library_path": "libvulkan_panfrost_kbase.so"
+              },
+              "file_format_version": "1.0.1"
+          }
+          EOF
+
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          {
+              "ICD": {
+                  "api_version": "1.4.352",
+                  "library_arch": "32",
+                  "library_path": "libvulkan_panfrost_kbase.so"
+              },
+              "file_format_version": "1.0.1"
+          }
+          EOF
+
+          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          
+          echo "-> Configurando permisos POSIX..."
+          chmod 755 pkg/usr pkg/usr/lib pkg/usr/share pkg/usr/share/vulkan pkg/usr/share/vulkan/icd.d
+          chmod 644 pkg/usr/lib/libvulkan_panfrost_kbase.so
+          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+
+          echo "=== Contenido Estructural del Paquete ==="
+          ls -R pkg
+          echo "========================================="
+          
+          echo "-> Comprimiendo estructura dual en wrapper.tzst..."
+          cd pkg
+          tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
+          cd ..
+
+      - name: Upload Final wrapper.tzst for Bannerlator
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bannerlator-Mali-NDK-Wrapper
+          path: wrapper.tzst
