@@ -16,19 +16,31 @@ jobs:
       - name: Patch anon_file.c for memfd_create
         run: |
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
-      # 🟢 EXTRAE MIDGARD DIRECTAMENTE DE TU REPOSITORIO GAMENATIVE-WRAPPER
-      - name: Automate Sparse Checkout for Midgard Folder from your Repo
+      
+      # 🟢 INYECCIÓN MAESTRA MULTI-CARPETA: Extrae todo el ecosistema Bifrost de tu repositorio gamenative-wrapper
+      - name: Automate Sparse Checkout for Bifrost Ecosystem from your Repo
         run: |
-          echo "-> Realizando clonación selectiva de la carpeta de hardware desde tu repositorio..."
-          rm -rf src/panfrost/midgard
-          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com /tmp/gamenative-src
+          echo "-> Limpiando directorios modernos e incompletos..."
+          rm -rf src/panfrost/midgard src/panfrost/compiler src/panfrost/include src/panfrost/lib
+          
+          echo "-> Descargando el backend completo de Bifrost de tu rama estable..."
+          git clone --depth 1 --sparse --filter=blob:none -b wrapper-25 https://github.com/Over-cmd/gamenative-wrapper /tmp/gamenative-src
           cd /tmp/gamenative-src
-          git sparse-checkout set src/panfrost/midgard
+          # Marcamos los 4 directorios críticos de hardware que confirmamos en el árbol de archivos
+          git sparse-checkout set src/panfrost/midgard src/panfrost/compiler src/panfrost/include src/panfrost/lib
           cd $GITHUB_WORKSPACE
+          
+          echo "-> Soldando las estructuras estables en el árbol de compilación actual..."
           cp -r /tmp/gamenative-src/src/panfrost/midgard src/panfrost/
+          cp -r /tmp/gamenative-src/src/panfrost/compiler src/panfrost/
+          cp -r /tmp/gamenative-src/src/panfrost/include src/panfrost/
+          cp -r /tmp/gamenative-src/src/panfrost/lib src/panfrost/
           rm -rf /tmp/gamenative-src
+          
+          echo "-> Registrando subdirectorio en src/panfrost/meson.build..."
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           ls -la src/panfrost/midgard/meson.build
+      
       - name: Redirect Panfrost Build Logic to Wrapper Identity natively
         run: |
           echo "-> Redireccionando la lógica de compilación de panfrost hacia la identidad wrapper..."
@@ -41,6 +53,7 @@ jobs:
           sed -i "s/'vulkan_panfrost'/'vulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
           echo "-> Redireccionando firmas de texto internas en archivos C..."
           find src/panfrost/vulkan/ -type f -name "*.c" -exec sed -i 's/"panfrost"/"wrapper"/g' {} + 2>/dev/null || true
+      
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           PANVK_DEVICE=$(find src/ -name "*device.c" | head -n 1)
@@ -49,10 +62,12 @@ jobs:
             sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
@@ -61,10 +76,12 @@ jobs:
           sudo apt-get install -y "libclc-${LLVM_MAJOR}-dev" "libllvmspirvlib-${LLVM_MAJOR}-dev" "libclang-${LLVM_MAJOR}-dev"
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
+      
       - name: Install and Pin Bindgen for Mesa
         run: |
           cargo install --locked --version 0.72.1 bindgen-cli
           echo "${HOME}/.cargo/bin" >> "${GITHUB_PATH}"
+      
       - name: Generate Host Tools
         run: |
           meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
@@ -74,6 +91,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
+      
       - name: Configure Meson
         env:
           PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
@@ -82,9 +100,11 @@ jobs:
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
           meson setup build --reconfigure --cross-file android-cross.txt -Dbuildtype=${{ matrix.build-type }} -Dplatforms=android -Dandroid-stub=true -Dandroid-libbacktrace=disabled -Dplatform-sdk-version=30 -Dglx=disabled -Dgbm=disabled -Degl=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dgallium-drivers="" -Dshared-glapi=disabled -Dzstd=disabled -Dmesa-clc=system -Dprecomp-compiler=system -Dvulkan-drivers=wrapper -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
+      
       - name: Compile Project
         run: |
           meson compile -C build --jobs 2
+      
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
@@ -103,6 +123,7 @@ jobs:
           echo "msf:315508" > pkg/usr/version.txt
           chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vulkan/icd.d/*.json pkg/usr/share/vulkan/settings.d/*.json pkg/usr/version.txt
           tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
+      
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
         with:
