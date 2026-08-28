@@ -83,34 +83,39 @@ jobs:
 
       - name: Stage runtime files for Bannerlator
         run: |
-          echo "-> Inicializando empaquetado estructural con arquitectura compatible para Bannerlator..."
+          echo "-> Inicializando empaquetado estructural solicitado (usr/lib y usr/share)..."
           rm -rf pkg
-          mkdir -p pkg/d3d/syswow64 pkg/d3d/system32 pkg/share/vulkan/icd.d
           
-          echo "-> Extrayendo y renombrando el binario original..."
+          # Creamos estrictamente la estructura raíz solicitada: usr/lib y usr/share/vulkan/icd.d
+          mkdir -p pkg/usr/lib
+          mkdir -p pkg/usr/share/vulkan/icd.d
+          
+          echo "-> Extrayendo y renombrando el binario original a la ruta usr/lib..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/d3d/system32/libvulkan_panfrost_kbase.so
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
             
             # Usar llvm-strip del NDK para evitar corrupciones de arquitectura cruzada
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then
-              $STRIP_BIN --strip-unneeded pkg/d3d/system32/libvulkan_panfrost_kbase.so
+              $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_panfrost_kbase.so
             else
-              strip --strip-unneeded pkg/d3d/system32/libvulkan_panfrost_kbase.so
+              strip --strip-unneeded pkg/usr/lib/libvulkan_panfrost_kbase.so
             fi
           else
             echo "ERROR: ¡No se encontró el archivo compilado libvulkan_panfrost.so!" && exit 1
           fi
           
-          echo "-> Vinculando el manifiesto ICD directamente en el árbol interno..."
+          echo "-> Vinculando el manifiesto ICD directamente en usr/share/vulkan/icd.d..."
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
-            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-            sed -i 's|"library_path":.*|"library_path": "d3d/system32/libvulkan_panfrost_kbase.so"|g' pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+            cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+            
+            # Modificación de la ruta interna del JSON para que apunte exactamente al nuevo binario cargado en Linux
+            sed -i 's|"library_path":.*|"library_path": "usr/lib/libvulkan_panfrost_kbase.so"|g' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
           else
             echo "ERROR: ¡No se encontró el manifiesto original!" && exit 1
           fi
           
-          echo "-> Creando archivo meta.json para el Gestor de Bannerlator..."
+          echo "-> Creando archivo meta.json en la raíz del paquete..."
           echo '{"name": "PanVK Panfrost Kbase Mod", "description": "Controlador Vulkan personalizado para GPUs Mali con soporte Kbase Kernel Driver", "type": "graphics_driver", "version": "1.0.0", "author": "Mesa Community / Mod", "compatibility": {"min_bannerlator_version": "3.0"}}' > pkg/meta.json
           
           echo "-> Asignando permisos POSIX..."
@@ -121,8 +126,9 @@ jobs:
 
       - name: Compress and Structure Package
         run: |
-          echo "-> Generando archivo comprimido .tzst limpio que Bannerlator validará..."
+          echo "-> Generando archivo comprimido .tzst con raíz usr/ y meta.json..."
           cd pkg
+          # tar empaqueta todo lo que está dentro de pkg, dejando a 'usr/' y 'meta.json' directamente en la raíz del .tzst
           tar -I 'zstd -19 -T0' -cf ../PanVK_kbase_wrapper.tzst *
           cd ..
 
