@@ -158,13 +158,15 @@ jobs:
           if [ -f "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" ]; then
             cp -v "build/src/panfrost/vulkan/panfrost_icd.aarch64.json" pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
             
-            # Modificamos el JSON dinámicamente mediante Python embebido para actualizar la ruta apuntando a la nueva estructura del wrapper de Bannerlator
-            python3 - pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json "/usr/lib/libvulkan_panfrost_kbase.so" <<'PY'
+            # Modificamos el JSON dinámicamente mediante Python pasándole los argumentos de forma correcta con el guion al final
+            python3 - pkg/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json "d3d/system32/libvulkan_panfrost_kbase.so" <<'PY'
           import json, sys
-          with open(sys.argv[1], encoding="utf-8") as s:
+          json_path = sys.argv[1]
+          lib_path = sys.argv[2]
+          with open(json_path, encoding="utf-8") as s:
               m = json.load(s)
-          m["ICD"]["library_path"] = sys.argv[2]
-          with open(sys.argv[1], "w", encoding="utf-8") as o:
+          m["ICD"]["library_path"] = lib_path
+          with open(json_path, "w", encoding="utf-8") as o:
               json.dump(m, o, indent=4)
               o.write("\n")
           PY
