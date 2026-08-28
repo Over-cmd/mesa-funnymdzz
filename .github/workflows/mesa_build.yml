@@ -24,18 +24,29 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      # 🟢 INYECCIÓN DE HARDWARE DEFINITIVA: Descarga directa y precisa de la carpeta midgard desde tu GitHub
+      # 🟢 CORRECCIÓN CRÍTICA DE RED: Inyección automatizada del compilador Midgard/Bifrost usando URLs funcionales reales
       - name: Inject Midgard Compiler via Direct GitHub Tarball
         run: |
           echo "-> Descargando el compilador Midgard/Bifrost desde el repositorio estable..."
           mkdir -p src/panfrost/midgard
           
-          # Descargamos el tarball completo de tu rama wrapper-25 y filtramos solo la carpeta midgard en un único paso
+          # Descarga directa del tarball de la rama del proyecto usando la URL de descarga real de servidores de GitHub
           curl -sL "https://github.com" | \
-          tar -xzf - --strip-components=3 "gamenative-wrapper-wrapper-25/src/panfrost/midgard" -C src/panfrost/midgard
+          tar -xzf - --strip-components=3 "mesa-main/src/panfrost/midgard" -C src/panfrost/midgard || true
+          
+          echo "-> Verificando inyección primaria..."
+          if [ ! -f "src/panfrost/midgard/meson.build" ]; then
+            echo "-> Tarball primario no disponible por comodines. Aplicando fallback mediante clonación selectiva..."
+            rm -rf src/panfrost/midgard
+            
+            # Clonación de la estructura del espejo oficial de Mesa de forma selectiva para ahorrar espacio y RAM
+            git clone --depth 1 --sparse --filter=blob:none https://github.com mesa-temp
+            cd mesa-temp && git sparse-checkout set src/panfrost/midgard && cd ..
+            cp -r mesa-temp/src/panfrost/midgard src/panfrost/
+            rm -rf mesa-temp
+          fi
           
           echo "-> Modificando src/panfrost/meson.build para forzar la lectura del compilador Bifrost..."
-          # Registramos la carpeta midgard dentro de la matriz de subdirectorios del build de panfrost
           sed -i "s/subdirs = \[/subdirs = \['midgard', /g" src/panfrost/meson.build 2>/dev/null || true
           
           echo "-> Verificando estructura inyectada con éxito:"
@@ -53,7 +64,7 @@ jobs:
             echo "-> Parche de vkCreateInstance inyectado."
           fi
 
-       Tarjeta de video / Procesador: Instalar Python y dependencias
+      # 🟢 CORRECCIÓN DE SINTAXIS: Se eliminó el texto en español suelto que rompía el parser de GitHub
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -94,7 +105,7 @@ jobs:
           meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
-          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-bindgen2"
+          ln -sf "build-host/src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-gen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
@@ -106,7 +117,6 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           envsubst < android.toml > android-cross.txt
-          # Compilamos el driver Vulkan de panfrost limpio aprovechando el parche de inyección
           meson setup build --reconfigure \
               --cross-file android-cross.txt \
               -Dbuildtype=${{ matrix.build-type }} \
@@ -132,7 +142,6 @@ jobs:
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
             cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
             
-            # Ajustamos firmas ELF externas para estabilizar vkCreateInstance
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
             
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
@@ -144,7 +153,6 @@ jobs:
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           
-          # Inyección de las variables seguras que encienden PanVK sobre el kernel kbase de tu Mali-G52
           echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
 
           echo "msf:315508" > pkg/usr/version.txt
