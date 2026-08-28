@@ -24,17 +24,35 @@ jobs:
           # SDK 30+ tiene memfd_create nativo en NDK
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
+      # 🟢 CORRECCIÓN HISTÓRICA PARA BIFROST: Forzar mapeo de memoria clásico para Mali-G52
+      - name: Patch PanVK Memory allocation for Bifrost/kbase
+        run: |
+          echo "-> Buscando archivos de gestión de memoria de PanVK..."
+          PANVK_MEM=$(find src/ -name "panvk_mempool.c" -o -name "panvk_device.c")
+          for file in $PANVK_MEM; do
+            if [ -f "$file" ]; then
+              echo "-> Forzando coherencia de buffer para kernel kbase en: $file"
+              sed -i 's/\r$//' "$file"
+              # Forza al driver a usar banderas de asignación de memoria compatibles con GPUs Mali antiguas
+              sed -i 's/PAN_KMOD_BO_ALLOC_NOEXEC/PAN_KMOD_BO_ALLOC_NOEXEC | 1/g' "$file" 2>/dev/null || true
+            fi
+          done
+
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
-          echo "-> Localizando el archivo del dispositivo PanVK..."
           PANVK_DEVICE=$(find src/ -name "panvk_device.c" | head -n 1)
           if [ -n "$PANVK_DEVICE" ] && [ -f "$PANVK_DEVICE" ]; then
-            echo "-> Aplicando bypass de inicialización de instancia en: $PANVK_DEVICE"
             sed -i 's/\r$//' "$PANVK_DEVICE"
             sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
-            echo "-> Parche de vkCreateInstance inyectado."
           fi
+
+      - name: Native Driver Rename from Panfrost to Wrapper
+        run: |
+          find src/panfrost/vulkan/ -type f -name "*.c" -exec sed -i 's/"panfrost"/"wrapper"/g' {} + 2>/dev/null || true
+          sed -i "s/output : 'libvulkan_panfrost'/output : 'libvulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
+          sed -i "s/name_prefix : 'libvulkan_'/name_prefix : 'libvulkan_'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
+          sed -i "s/'vulkan_panfrost'/'vulkan_wrapper'/g" src/panfrost/vulkan/meson.build 2>/dev/null || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -72,7 +90,6 @@ jobs:
 
       - name: Generate Host Tools
         run: |
-          echo "-> Compilando herramientas nativas de host..."
           meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
           ninja -j 2 -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           ln -sf "build-host/src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
@@ -109,16 +126,14 @@ jobs:
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
-          echo "-> Extrayendo el driver nativo de Panfrost..."
-          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v build/src/panfrost/vulkan/libvulkan_panfrost.so pkg/usr/lib/libvulkan_wrapper.so
-            
+          TARGET_SO=$(find build/ -name "libvulkan_wrapper.so" | head -n 1)
+          if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
+            cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
-            
             STRIP_BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
             if [ -f "$STRIP_BIN" ]; then $STRIP_BIN --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; else strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so; fi
           else
-            echo "ERROR: ¡No se encontró libvulkan_panfrost.so!" && exit 1
+            echo "ERROR: ¡No se encontró libvulkan_wrapper.so!" && exit 1
           fi
           
           echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
