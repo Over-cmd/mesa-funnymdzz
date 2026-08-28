@@ -38,7 +38,8 @@ jobs:
               bison \
               flex \
               libdrm-dev \
-              pkg-config
+              pkg-config \
+              gettext # 🟢 CORRECCIÓN 1: Necesario para que funcione envsubst con android.toml
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
@@ -87,7 +88,7 @@ jobs:
               -Dzstd=disabled \
               -Dmesa-clc=system \
               -Dprecomp-compiler=system \
-              -Dvulkan-drivers=panfrost \
+              -Dvulkan-drivers=panfrost_wrapper \ # 🟢 CORRECCIÓN 2: Se cambia 'panfrost' por 'panfrost_wrapper' para que enlace el código del fork
               -Dllvm=disabled -Dpanfrost-kmds=kbase,panthor
 
       - name: Compile Project
