@@ -7,26 +7,23 @@ rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulk
 echo "-> Liberando los permisos del volumen de Docker..."
 sudo chmod -R 777 "$BUILD_DIR" 2>/dev/null || true
 
-echo "-> Buscando el binario original libvulkan_panfrost.so generado por Docker..."
-# Capturamos el archivo físico original de Mesa Panfrost
-TARGET_SO=$(find "$BUILD_DIR" -type f -name "libvulkan_panfrost.so" | head -n 1)
+echo "-> Buscando el binario generado por Docker..."
+# Captura tanto libvulkan_wrapper.so como libvulkan_panfrost.so en cualquier subcarpeta interna
+TARGET_SO=$(find "$BUILD_DIR" -type f -name "libvulkan_wrapper.so" -o -name "libvulkan_panfrost.so" | head -n 1)
 
 if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
-  echo "-> ¡Librería original localizada con éxito en: $TARGET_SO!"
-  echo "-> Realizando mutación externa a libvulkan_wrapper.so..."
-  # Lo copiamos a la estructura final cambiando el nombre al formato wrapper
+  echo "-> ¡Librería localizada con éxito en: $TARGET_SO!"
+  echo "-> Realizando mutación y empaquetado para Winlator..."
   cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
   
-  echo "-> Modificando la cabecera SONAME interna mediante patchelf para Winlator..."
-  # 🟢 ESTE ES EL TRUCO: Cambiamos la identidad interna del binario para que no se rompa al cargar
+  echo "-> Modificando la cabecera SONAME interna mediante patchelf..."
   patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
-  
-  echo "-> Limpiando símbolos de depuración redundantes..."
   strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
 else
-  echo "🚨 ERROR CRÍTICO: No se encontró el binario 'libvulkan_panfrost.so' en el directorio de construcción."
-  echo "-> Estructura actual de la carpeta para diagnóstico:"
-  ls -R "$BUILD_DIR" | head -n 40
+  echo "🚨 ERROR CRÍTICO: No se encontró ningún binario gráfico parcial en el directorio de construcción."
+  echo "-> Listando árbol completo de la carpeta src para diagnóstico profundo:"
+  find "$BUILD_DIR" -name "*.so" 2>/dev/null || true
+  ls -R "$BUILD_DIR/src" 2>/dev/null | head -n 40
   exit 1
 fi
 
