@@ -38,11 +38,14 @@ jobs:
               flex \
               libdrm-dev \
               pkg-config \
-              gettext
+              gettext \
+              llvm-dev \
+              libclang-dev \
+              libclc-dev
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-      # GENERACIÓN DE EMULADORES DE HOST: Rompe el bloqueo de arquitectura cruzada de clc
+      # GENERACIÓN DE EMULADORES DE HOST: Ahora con llvm=enabled y mesa-clc=enabled reglamentario para x86_64
       - name: Generate Host Tools
         run: |
           meson setup build-host \
@@ -52,18 +55,17 @@ jobs:
               -Dtools=panfrost \
               -Dprecomp-compiler=enabled \
               -Dinstall-precomp-compiler=true \
-              -Dllvm=disabled \
+              -Dllvm=enabled \
               -Dmesa-clc=enabled -Dinstall-mesa-clc=true
 
           ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2
 
-          # Creamos los enlaces simbólicos obligatorios en el PATH
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
 
-      # CONFIGURACIÓN DEL CROSS-FILE: Reemplaza android.toml generando el archivo nativo de Google en caliente
+      # CONFIGURACIÓN DEL CROSS-FILE NATIVO DEL NDK DE GOOGLE
       - name: Configure Cross-File Matrix
         run: |
           cat << 'EOF' > android-cross.txt
@@ -85,7 +87,7 @@ jobs:
           EOF
           envsubst < android-cross.txt > android-cross-compiled.txt
 
-      # CONFIGURACIÓN DE MESON: Cargamos los binarios falsos del sistema que generamos en el host
+      # CONFIGURACIÓN DE MESON PURA DE VULKAN PANVK (Aislado de LLVM para tu celular)
       - name: Configure Meson
         run: |
           meson setup build \
@@ -118,7 +120,6 @@ jobs:
       - name: Grant Execute Permissions to Package Script
         run: chmod +x ci-scripts/*.sh
 
-      # REESTRUCTURACIÓN COMPATIBLE: Tu script rescata el libvulkan_panfrost.so y crea el wrapper.tzst
       - name: Structure and Pack Final Container Package
         run: ./ci-scripts/package_wrapper.sh
 
