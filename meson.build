@@ -1050,8 +1050,9 @@ with_libbacktrace = get_option('android-libbacktrace') \
   .disable_auto_if(not with_platform_android) \
   .allowed()
 
-# 🟢 DECLARACIÓN DE EMERGENCIA: Satisface la línea 323 de src/util/ sin pedir stubs
+# 🟢 DECLARACIONES DE EMERGENCIA: Satisface las llamadas de dependencias en src/util/ y src/vulkan/runtime/
 dep_android = []
+idep_u_gralloc = null_dep
 
 if false # with_platform_android
   dep_android_ui = null_dep
@@ -1063,6 +1064,9 @@ if false # with_platform_android
       dependency('log'),
       dependency('sync'),
     ]
+    # ... (el resto del código del bloque se queda exactamente igual como lo tienes)
+  endif
+endif
     if with_libbacktrace and get_option('platform-sdk-version') < 34
       cpp_args += '-DWITH_LIBBACKTRACE'
       dep_android += dependency('backtrace')
