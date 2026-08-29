@@ -31,14 +31,14 @@ jobs:
       - name: Apply C bypass Patches to PanVK
         run: ./ci-scripts/patch_source.sh
 
-      # COMPILACIÓN MAESTRA DOCKER: Meson pasará de largo la verificación y Ninja compilará tu driver
+      # 🟢 COMPILACIÓN MAESTRA GLOBAL: Comando Ninja corregido a formato plano para evitar fallos de target desconocido
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
             rm -rf ${{ env.BUILD_DIR }} && \
-            meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
-            ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
+            meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Degl=disabled -Dbuildtype=release && \
+            ninja -C ${{ env.BUILD_DIR }} && \
             chmod -R 777 ${{ env.BUILD_DIR }}
           "
 
