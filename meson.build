@@ -996,7 +996,7 @@ with_poly = [
 ].contains(true)
 
 dep_clc = null_dep
-if false # with_clc
+if with_clc
   dep_clc = dependency('libclc')
 endif
 
@@ -1050,11 +1050,7 @@ with_libbacktrace = get_option('android-libbacktrace') \
   .disable_auto_if(not with_platform_android) \
   .allowed()
 
-# 🟢 DECLARACIONES DE EMERGENCIA: Satisface las llamadas de dependencias en src/util/ y src/vulkan/runtime/
-dep_android = []
-idep_u_gralloc = null_dep
-
-if false # with_platform_android
+if with_platform_android
   dep_android_ui = null_dep
   dep_android_mapper4 = null_dep
   if not with_android_stub
@@ -2016,13 +2012,9 @@ _shared_llvm = get_option('shared-llvm') \
   .disable_auto_if(host_machine.system() == 'windows') \
   .allowed()
 
-# 🟢 BYPASS INDESTRUCTIBLE DE LLVM: Forzamos dependencia vacía para saltar la búsqueda
-dep_llvm = null_dep
-
 if dep_llvm.found()
-  # Comentamos las líneas problemáticas internas para que evalúe en falso limpiamente
-  # pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
-  # pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
+  pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
+  pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
 
   if (with_swrast_vk or with_gallium_llvmpipe) and not draw_with_llvm
     error('Lavapipe and llvmpipe require LLVM draw support.')
@@ -2031,7 +2023,6 @@ if dep_llvm.found()
   if with_gallium_i915 and not draw_with_llvm
     error('i915 requires LLVM draw support for vertex shaders.')
   endif
-# 🚨 ATENCIÓN: No pongas ningún "endif" aquí. Deja que el archivo continúe con su "else" original tal y como viene de fábrica.
 
   if host_machine.system() != 'windows'
     # LLVM can be built without rtti, turning off rtti changes the ABI of C++
