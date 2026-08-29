@@ -23,7 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd patchelf
 
-      # Clonación segura de libcutils original
+      # Clonación interna segura de libcutils original
       - name: Checkout Standalone libcutils Repo
         uses: actions/checkout@v4
         with:
@@ -31,15 +31,15 @@ jobs:
           ref: 'master'
           path: 'tmp_libcutils'
 
-      # Clonación segura de libhardware original de Android
-      - name: Checkout Standalone libhardware Repo
+      # 🟢 TU NUEVO HALLAZGO: Clonación impecable y segura del HAL original de LineageOS
+      - name: Checkout LineageOS libhardware Repo
         uses: actions/checkout@v4
         with:
-          repository: 'laarid/package_android-libhardware'
-          ref: 'buster'
+          repository: 'LineageOS/android_hardware_libhardware'
+          ref: 'lineage-23.2'
           path: 'tmp_libhardware'
 
-      # Ensamblamos, estructuramos y compilamos las instalaciones originales de Android de forma local
+      # Ensamblamos y compilamos las dos instalaciones originales de Android de forma local
       - name: Compile and Install Original Android Cutils & Hardware
         run: |
           echo "-> Estructurando el arbol de dependencias logicas locales..."
@@ -52,10 +52,11 @@ jobs:
             cp -r tmp_libcutils/include_vndk/cutils shutils/
           fi
           
-          echo "-> Copiando las cabeceras nativas reales de hardware HAL encontradas..."
+          echo "-> Copiando las cabeceras nativas de LineageOS HAL..."
           cp -r tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
+          cp -r tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
           
-          # 🟢 INYECCIÓN CRÍTICA DE STUB LOG: Creamos las macros de registro que exige hardware.c
+          # Inyección de las macros de registro que exige hardware.c
           cat << 'EOF' > shutils/log/log.h
           #ifndef ANDROID_LOG_H
           #define ANDROID_LOG_H
@@ -80,8 +81,7 @@ jobs:
           g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
-          echo "-> Compilando hardware.c original de tu nuevo repositorio..."
-          # Compilamos el HAL original inyectando las dependencias internas de shutils
+          echo "-> Compilando hardware.c nativo de LineageOS..."
           gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils
           ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
 
@@ -97,13 +97,13 @@ jobs:
           echo "-> Generando archivo de configuracion pkg-config oficial para hardware..."
           cat << 'EOF' > shutils/hardware.pc
           Name: hardware
-          Description: Standalone Android hardware HAL library for Mesa
+          Description: LineageOS Android hardware HAL library for Mesa
           Version: 1.0.0
           Cflags: -I/workspace/shutils
           Libs: -L/workspace/shutils/lib -lhardware
           EOF
 
-          echo "-> Verificando entorno original unificado de Shims:"
+          echo "-> Verificando entorno original unificado de LineageOS Shims:"
           ls -R shutils/
           rm -rf tmp_libcutils tmp_libhardware
 
@@ -118,14 +118,13 @@ jobs:
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
 
-      # COMPILACIÓN MAESTRA DOCKER: Pasamos de forma transparente tus dependencias originales unificadas mediante PKG_CONFIG_PATH
+      # COMPILACIÓN MAESTRA DOCKER: Pasamos las dependencias oficiales de LineageOS mediante PKG_CONFIG_PATH
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           echo "-> Compilando wrapper de forma nativa usando la infraestructura interna de Docker..."
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
             export PKG_CONFIG_PATH=/workspace/shutils && \
-            rm -rf ${{ env.BUILD_DIR }} && \
             meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
             ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
             chmod -R 777 ${{ env.BUILD_DIR }}
