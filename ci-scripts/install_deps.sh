@@ -6,6 +6,7 @@ sudo apt-get update
 sudo apt-get install -y zstd patchelf
 
 echo "-> Estructurando el arbol de dependencias logicas locales..."
+# Aseguramos que la carpeta raíz sea estrictamente shutils para coincidir con el path de Docker
 mkdir -p shutils/system shutils/lib shutils/log shutils/hardware shutils/sync shutils/android
 
 echo "-> Copiando las carpetas de cabeceras de cutils..."
@@ -32,9 +33,9 @@ typedef enum android_LogPriority {
     ANDROID_LOG_DEBUG, ANDROID_LOG_INFO, ANDROID_LOG_WARN,
     ANDROID_LOG_ERROR, ANDROID_LOG_FATAL, ANDROID_LOG_SILENT
 } android_LogPriority;
-int __android_log_print(int prio, const char* tag, const char* fmt, ...) __attribute__((format(printf, 3, 4)));
+int __android_log_print(int prio, const char* tag, const char* fmt, ...);
 int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap);
-void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...) __attribute__((noreturn, format(printf, 3, 4)));
+void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...);
 #define ALOGD(...) ((void)0)
 #define ALOGI(...) ((void)0)
 #define ALOGW(...) ((void)0)
@@ -69,7 +70,7 @@ cat << 'EOF' > shutils/system/graphics.h
 #endif
 EOF
 
-# Inyección de la estructura original nativewindow exigida por la línea 1068
+# Inyección de la estructura original nativewindow
 cat << 'EOF' > shutils/android/native_window.h
 #ifndef ANDROID_NATIVE_WINDOW_H
 #define ANDROID_NATIVE_WINDOW_H
@@ -122,7 +123,7 @@ EOF
 gcc -c -fPIC shutils/stub_sync.c -o shutils/stub_sync.o -Ishutils
 ar rcs shutils/lib/libsync.a shutils/stub_sync.o
 
-# Generamos manifiestos pkg-config oficiales
+# 🟢 MANIFIESTOS PKG-CONFIG CORRECTOS (Todos apuntando rígidamente a /workspace/shutils)
 cat << 'EOF' > shutils/cutils.pc
 Name: cutils
 Description: Standalone Android cutils library for Mesa
