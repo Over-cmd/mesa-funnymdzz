@@ -20,11 +20,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Install Zstd Packager
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zstd patchelf
-
       - name: Checkout Standalone libcutils Repo
         uses: actions/checkout@v4
         with:
@@ -39,160 +34,30 @@ jobs:
           ref: 'lineage-23.2'
           path: 'tmp_libhardware'
 
-      - name: Compile and Install Original Android Cutils & Hardware
-        run: |
-          echo "-> Estructurando el arbol de dependencias logicas locales..."
-          mkdir -p shutils/system shutils/lib shutils/log shutils/hardware
-          
-          echo "-> Copiando las carpetas de cabeceras de cutils..."
-          if [ -d "tmp_libcutils/include/cutils" ]; then
-            cp -r tmp_libcutils/include/cutils shutils/
-          elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
-            cp -r tmp_libcutils/include_vndk/cutils shutils/
-          fi
-          
-          echo "-> Copiando cabeceras HAL de LineageOS al entorno global de Shims..."
-          cp -rf tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
-          cp -rf tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
-          
-          # 🟢 INYECCIÓN COMPLETA DE LIBLOG: Declaramos los prototipos reales de la API de Android
-          cat << 'EOF' > shutils/log/log.h
-          #ifndef ANDROID_LOG_H
-          #define ANDROID_LOG_H
-          #include <stdarg.h>
-          #ifdef __cplusplus
-          extern "C" {
-          #endif
-          typedef enum android_LogPriority {
-              ANDROID_LOG_UNKNOWN = 0, ANDROID_LOG_DEFAULT, ANDROID_LOG_VERBOSE,
-              ANDROID_LOG_DEBUG, ANDROID_LOG_INFO, ANDROID_LOG_WARN,
-              ANDROID_LOG_ERROR, ANDROID_LOG_FATAL, ANDROID_LOG_SILENT
-          } android_LogPriority;
-          int __android_log_print(int prio, const char* tag, const char* fmt, ...) __attribute__((format(printf, 3, 4)));
-          int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap);
-          void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...) __attribute__((noreturn, format(printf, 3, 4)));
-          #define ALOGD(...) ((void)0)
-          #define ALOGI(...) ((void)0)
-          #define ALOGW(...) ((void)0)
-          #define ALOGE(...) ((void)0)
-          #define ALOGV(...) ((void)0)
-          #define ALOGE_IF(...) ((void)0)
-          #ifdef __cplusplus
-          }
-          #endif
-          #endif
-          EOF
+      - name: Grant Execute Permissions to CI Scripts
+        run: chmod +x ci-scripts/*.sh
 
-          cat << 'EOF' > shutils/system/graphics.h
-          #ifndef SYSTEM_GRAPHICS_H_
-          #define SYSTEM_GRAPHICS_H_
-          #include <stdint.h>
-          #endif
-          EOF
-          
-          echo "-> Compilando native_handle.cpp original de Android..."
-          g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils
-          ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
-          
-          echo "-> Creando cabecera de inyeccion forzada para hardware.c..."
-          cat << 'EOF' > shutils/force_includes.h
-          #ifndef FORCE_INCLUDES_H
-          #define FORCE_INCLUDES_H
-          #define _GNU_SOURCE
-          #include <stdbool.h>
-          #include <stdio.h>
-          #include <stdlib.h>
-          #include <unistd.h>
-          #include <limits.h>
-          #ifndef PATH_MAX
-          #define PATH_MAX 4096
-          #endif
-          #endif
-          EOF
-          
-          echo "-> Compilando hardware.c nativo de LineageOS con auto-inclusion..."
-          gcc -c -fPIC -std=c11 -include shutils/force_includes.h tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Itmp_libhardware/include -I.
-          ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
+      - name: Compile and Install Android Base Shims
+        run: ./ci-scripts/install_deps.sh
 
-          # 🟢 COMPILACIÓN BINARIA DE LIBLOG: Generamos el stub real para satisfacer al enlazador de Mesa
-          echo "-> Compilando stub real de liblog.a..."
-          cat << 'EOF' > shutils/stub_log.c
-          #include "log/log.h"
-          int __android_log_print(int prio, const char* tag, const char* fmt, ...) { return 0; }
-          int __android_log_vprint(int prio, const char* tag, const char* fmt, va_list ap) { return 0; }
-          void __android_log_assert(const char* cond, const char* tag, const char* fmt, ...) { while(1); }
-          EOF
-          gcc -c -fPIC shutils/stub_log.c -o shutils/stub_log.o -Ishutils
-          ar rcs shutils/lib/liblog.a shutils/stub_log.o
+      - name: Apply C bypass Patches to PanVK
+        run: ./ci-scripts/patch_source.sh
 
-          cat << 'EOF' > shutils/cutils.pc
-          Name: cutils
-          Description: Standalone Android cutils library for Mesa
-          Version: 1.0.0
-          Cflags: -I/workspace/shutils
-          Libs: -L/workspace/shutils/lib -lcutils
-          EOF
-          
-          cat << 'EOF' > shutils/hardware.pc
-          Name: hardware
-          Description: LineageOS Android hardware HAL library for Mesa
-          Version: 1.0.0
-          Cflags: -I/workspace/shutils
-          Libs: -L/workspace/shutils/lib -lhardware
-          EOF
-
-          # 🟢 MANIFIESTO PKG-CONFIG DE LIBLOG: Registramos oficialmente la dependencia ante Meson
-          cat << 'EOF' > shutils/log.pc
-          Name: log
-          Description: Original Android logging library for Mesa
-          Version: 1.0.0
-          Cflags: -I/workspace/shutils
-          Libs: -L/workspace/shutils/lib -llog
-          EOF
-
-          echo "-> Verificando entorno unificado completo de Shims de Android:"
-          ls -R shutils/
-          rm -rf tmp_libcutils tmp_libhardware
-
-      - name: Patch PanVK vkCreateInstance for Forced Initialization
-        run: |
-          PANVK_DEVICE=$(find src/ -name "*device.c" | head -n 1)
-          if [ -n "$PANVK_DEVICE" ] && [ -f "$PANVK_DEVICE" ]; then
-            echo "-> Aplicando bypass de inicialización de instancia en código C..."
-            sed -i 's/\r$//' "$PANVK_DEVICE"
-            sed -i 's/instance->vk.enabled_extensions.KHR_get_physical_device_properties2/true/g' "$PANVK_DEVICE" 2>/dev/null || true
-            sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
-          fi
-
+      # 🟢 CORRECCIÓN CENTRAL: Se introduce la inyección forzada de PKG_CONFIG_PATH y PKG_CONFIG_SYSROOT_DIR dentro del entorno Docker
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
-          echo "-> Compilando wrapper de forma nativa usando la infraestructura interna de Docker..."
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
             export PKG_CONFIG_PATH=/workspace/shutils && \
-            meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
+            export PKG_CONFIG_SYSROOT_DIR=/ && \
+            rm -rf ${{ env.BUILD_DIR }} && \
+            meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dpkg_config_libdir=/workspace/shutils -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
             ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
             chmod -R 777 ${{ env.BUILD_DIR }}
           "
 
-      - name: Structure and Pack wrapper.tzst
-        run: |
-          rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
-          TARGET_SO=$(find ${{ env.BUILD_DIR }}/ -name "libvulkan_wrapper.so" | head -n 1)
-          if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
-            echo "-> Moviendo la librería wrapper nativa al árbol de empaquetado..."
-            cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
-            patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
-            strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
-          else
-            echo "ERROR: ¡No se encontró la librería libvulkan_wrapper.so en el directorio ${{ env.BUILD_DIR }}!" && exit 1
-          fi
-          echo '{"ICD":{"api_version":"1.4.352","library_arch":"64","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-          echo '{"ICD":{"api_version":"1.4.352","library_arch":"32","library_path":"libvulkan_wrapper.so"},"file_format_version":"1.0.1"}' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
-          echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
-          echo "msf:315508" > pkg/usr/version.txt
-          chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vulkan/icd.d/*.json pkg/usr/share/vulkan/settings.d/*.json pkg/usr/version.txt
-          tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
+      - name: Structure and Pack Final Container Package
+        run: ./ci-scripts/package_wrapper.sh
 
       - name: Upload Final wrapper.tzst
         uses: actions/upload-artifact@v4
