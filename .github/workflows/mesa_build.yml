@@ -31,15 +31,18 @@ jobs:
           ref: 'master'
           path: 'tmp_libcutils'
 
-      # Estructuramos y compilamos las funciones reales de Android corrigiendo la ruta de inclusión
+      # Estructuramos y compilamos las funciones reales de Android corrigiendo la ruta de inclusión estructural
       - name: Compile and Install Original Android Cutils
         run: |
           echo "-> Estructurando el arbol de dependencias logicas locales..."
-          mkdir -p shutils/cutils shutils/system shutils/lib
+          mkdir -p shutils/system shutils/lib
           
-          echo "-> Copiando las cabeceras nativas reales desde el clon seguro..."
-          cp -r tmp_libcutils/include/cutils/* shutils/cutils/ 2>/dev/null || true
-          cp -r tmp_libcutils/include_vndk/cutils/* shutils/cutils/ 2>/dev/null || true
+          # 🟢 CORRECCIÓN DE COPIADO: Copiamos la carpeta 'cutils' entera, manteniendo su identidad de directorio
+          if [ -d "tmp_libcutils/include/cutils" ]; then
+            cp -r tmp_libcutils/include/cutils shutils/
+          elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
+            cp -r tmp_libcutils/include_vndk/cutils shutils/
+          fi
           
           # Generamos una cabecera de compatibilidad para evitar bloqueos del compilador cruzado
           cat << 'EOF' > shutils/system/graphics.h
@@ -50,8 +53,8 @@ jobs:
           EOF
           
           echo "-> Compilando native_handle.cpp original del repositorio..."
-          # 🟢 CORRECCIÓN: Añadimos -I. para que resuelva la ruta interna <cutils/native_handle.h> usando la estructura de la carpeta shutils
-          g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils -I.
+          # 🟢 CORRECCIÓN DE COMPILADOR: Usamos -Ishutils para que g++ resuelva <cutils/native_handle.h> de forma natural
+          g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
           echo "-> Generando archivo de configuracion pkg-config oficial..."
