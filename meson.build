@@ -1064,9 +1064,6 @@ if false # with_platform_android
       dependency('log'),
       dependency('sync'),
     ]
-    # ... (el resto del código del bloque se queda exactamente igual como lo tienes)
-  endif
-endif
     if with_libbacktrace and get_option('platform-sdk-version') < 34
       cpp_args += '-DWITH_LIBBACKTRACE'
       dep_android += dependency('backtrace')
