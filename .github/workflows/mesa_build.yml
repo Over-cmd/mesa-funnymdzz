@@ -1,7 +1,8 @@
-name: Android NDK Build (PanVK Native via Local Scripts)
+name: PanVK kbase wrapper release
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -15,60 +16,192 @@ jobs:
         build-type: [release]
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Source
         uses: actions/checkout@v4
+
+      - name: Patch anon_file.c for memfd_create
+        run: |
+          echo "-> Aplicando parches de compatibilidad para Android..."
+          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+          
+          echo "-> Aplicando parche automático a pan_device.c..."
+          find . -name "pan_device.c" -exec sed -i 's/pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_id_range = pan_query_core_count(\&dev->kmod.dev->props);/g' {} +
+          find . -name "pan_device.c" -exec sed -i 's/\\&/\&/g' {} +
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
 
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-              build-essential \
-              libelf-dev \
-              spirv-tools \
-              bison \
-              flex \
-              libdrm-dev \
-              pkg-config \
-              gettext
+            build-essential \
+            llvm-19-dev \
+            libclang-19-dev \
+            libclc-19-dev \
+            libllvmspirvlib-19-dev \
+            libelf-dev \
+            spirv-tools \
+            bison \
+            flex \
+            libdrm-dev \
+            pkg-config \
+            gettext
+
           python -m pip install --upgrade pip
-          pip install mako PyYAML meson ninja packaging
+          pip install mako PyYAML 'meson>=1.4.0' ninja packaging
 
-      # Concedemos permisos totales de ejecución a tu artillería de scripts locales
-      - name: Grant Execute Permissions to Local Scripts
+      - name: Build Host Tools
         run: |
-          chmod +x setup.sh compile.sh log.sh push.sh 2>/dev/null || true
-          chmod +x ci-scripts/*.sh 2>/dev/null || true
+          echo "-> Compilando herramientas nativas de host (x86_64) para Mesa..."
+          meson setup build-host \
+            -Dplatforms=[] \
+            -Dgallium-drivers=[] \
+            -Dvulkan-drivers=[] \
+            -Dtools=panfrost \
+            -Dprecomp-compiler=enabled \
+            -Dinstall-precomp-compiler=true \
+            -Dllvm=enabled \
+            -Dmesa-clc=enabled \
+            -Dinstall-mesa-clc=true
+            
+          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
+          
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-cl-dummy" 2>/dev/null || true
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
+          
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
 
-      # 🟢 PASO MAESTRO: Forzamos la exportación de las variables que exige de forma estricta tu android.toml
-      - name: Run Native Setup Script
+      # 🟢 PASO INTEGRAL DETECTOR: Encuentra el NDK real instalado y reescribe la variable en caliente
+      - name: Auto-Detect True Android NDK Path
+        id: ndk-detector
         run: |
-          echo "-> Mapeando variables de entorno dinámicas para android.toml..."
-          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          echo "-> Escaneando el sistema en busca de carpetas NDK validas..."
+          TRUE_NDK=""
+          
+          # Buscamos en las 2 rutas tipicas que usa GitHub Actions
+          for path in /usr/local/lib/android/sdk/ndk/* /home/runner/Android/Sdk/ndk/*; do
+            if [ -d "$path/toolchains/llvm/prebuilt/linux-x86_64/bin" ]; then
+              TRUE_NDK="$path"
+              break
+            fi
+          done
+          
+          if [ -z "$TRUE_NDK" ]; then
+            echo "🚨 ERROR CRITICO: No se encontro ningun NDK real con binarios de 64 bits!" && exit 1
+          fi
+          
+          echo "-> NDK Real Detectado y validado en: $TRUE_NDK"
+          # Guardamos de forma persistente la ruta para los siguientes pasos del Job
+          echo "REAL_NDK_HOME=$TRUE_NDK" >> $GITHUB_ENV
+
+      - name: Configure Cross-Compilation (Meson NDK)
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
+        run: |
+          # 🟢 Inyectamos la ruta real detectada en lugar de las variables por defecto rotas
+          export ANDROID_NDK_HOME="${{ env.REAL_NDK_HOME }}"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           
-          echo "-> ANDROID_NDK_HOME fijado en: $ANDROID_NDK_HOME"
-          echo "-> MESON_WORKING_DIR fijado en: $MESON_WORKING_DIR"
+          echo "-> ANDROID_NDK_HOME forzado en: $ANDROID_NDK_HOME"
+          echo "-> Generando archivo de configuración cruzada android-cross.txt..."
+          if [ -f "android.toml" ]; then
+            envsubst < android.toml > android-cross.txt
+          else
+            echo "ERROR: ¡Falta el archivo android.toml en la raíz del repositorio!" && exit 1
+          fi
           
-          # Ejecutamos tu script original de inicialización con el entorno inyectado
-          ./setup.sh
+          meson setup build --reconfigure \
+            --cross-file android-cross.txt \
+            -Dbuildtype=${{ matrix.build-type }} \
+            -Dplatforms=android \
+            -Dandroid-stub=true \
+            -Dandroid-libbacktrace=disabled \
+            -Dplatform-sdk-version=30 \
+            -Dglx=disabled \
+            -Dgbm=disabled \
+            -Degl=disabled \
+            -Dopengl=false \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Dglvnd=disabled \
+            -Dvalgrind=disabled \
+            -Dgallium-drivers=[] \
+            -Dshared-glapi=disabled \
+            -Dzstd=disabled \
+            -Dmesa-clc=system \
+            -Dprecomp-compiler=system \
+            -Dvulkan-drivers=panfrost \
+            -Dllvm=disabled \
+            -Dpanfrost-kmds=kbase,panthor
 
-      # Tu script compile.sh se encarga de compilar y aplicar los empaquetados
-      - name: Compile Project via Local Engine
+      - name: Compile Project
         run: |
-          ./compile.sh
+          echo "-> Ejecutando compilación cruzada hacia Android ARM64..."
+          meson compile -C build
 
-      # RESCATE Y CONVERSIÓN COMPATIBLE CON WINLATOR
-      - name: Structure and Pack Final Container Package
-        run: ./ci-scripts/package_wrapper.sh
+      - name: Structure and Pack wrapper.tzst for Bannerlator
+        run: |
+          echo "-> Creando estructura limpia para el cargador de Android..."
+          rm -rf pkg
+          mkdir -p pkg/usr/lib
+          mkdir -p pkg/usr/share/vulkan/icd.d
+          
+          echo "-> Extrayendo binario libvulkan_panfrost.so de la compilación del NDK..."
+          if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
+          else
+            echo "ERROR: ¡El NDK no generó el binario .so esperado!" && exit 1
+          fi
 
-      - name: Upload Final wrapper.tzst
+          echo "-> Creando manifiestos ICD JSON válidos (panfrost_kbase_icd)..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+          {
+              "ICD": {
+                  "api_version": "1.4.352",
+                  "library_arch": "64",
+                  "library_path": "libvulkan_panfrost_kbase.so"
+              },
+              "file_format_version": "1.0.1"
+          }
+          EOF
+
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          {
+              "ICD": {
+                  "api_version": "1.4.352",
+                  "library_arch": "32",
+                  "library_path": "libvulkan_panfrost_kbase.so"
+              },
+              "file_format_version": "1.0.1"
+          }
+          EOF
+
+          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          
+          echo "-> Ajustando permisos globales..."
+          chmod 755 pkg/usr pkg/usr/lib pkg/usr/share pkg/usr/share/vulkan pkg/usr/share/vulkan/icd.d
+          chmod 644 pkg/usr/lib/libvulkan_panfrost_kbase.so
+          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+
+          echo "=== Árbol Estructural del Paquete NDK ==="
+          ls -R pkg
+          echo "========================================="
+          
+          echo "-> Comprimiendo estructura dual en wrapper.tzst..."
+          cd pkg
+          tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
+          cd ..
+
+      - name: Upload Final wrapper.tzst for Bannerlator
         uses: actions/upload-artifact@v4
         with:
-          name: Mesa-Wrapper-Zstd
+          name: Bannerlator-Mali-NDK-Wrapper
           path: wrapper.tzst
-          if-no-files-found: error
