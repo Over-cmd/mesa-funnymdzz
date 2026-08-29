@@ -1050,6 +1050,9 @@ with_libbacktrace = get_option('android-libbacktrace') \
   .disable_auto_if(not with_platform_android) \
   .allowed()
 
+# 🟢 DECLARACIÓN DE EMERGENCIA: Satisface la línea 323 de src/util/ sin pedir stubs
+dep_android = []
+
 if false # with_platform_android
   dep_android_ui = null_dep
   dep_android_mapper4 = null_dep
