@@ -2027,7 +2027,7 @@ dep_llvm = dependency(
   fallback : ['llvm', 'dep_llvm'],
   include_type : 'system',
 )
-if dep_llvm.found()
+if false # dep_llvm.found()
   pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
   pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
 
@@ -2038,6 +2038,7 @@ if dep_llvm.found()
   if with_gallium_i915 and not draw_with_llvm
     error('i915 requires LLVM draw support for vertex shaders.')
   endif
+endif
 
   if host_machine.system() != 'windows'
     # LLVM can be built without rtti, turning off rtti changes the ABI of C++
