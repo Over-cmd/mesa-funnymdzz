@@ -31,7 +31,7 @@ jobs:
       - name: Apply C bypass Patches to PanVK
         run: ./ci-scripts/patch_source.sh
 
-      # 🟢 COMPILACIÓN MAESTRA UNIVERSAL: Ninja compilará de forma global tu driver activo sin targets confusos
+      # COMPILACIÓN MAESTRA DOCKER: Al haber fijado 'if false' en egl, pasará limpio hacia la fase de compilación masiva
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
