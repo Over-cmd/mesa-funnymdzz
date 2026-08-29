@@ -18,21 +18,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 🟢 PURGA EN CALIENTE: revierte los "if false" residuales para evitar errores sintácticos
-      - name: Purge Legacy Code Patches and Restore Factory Sources
-        run: |
-          echo "-> Purgando parches manuales previos en meson.build raiz..."
-          if [ -f "meson.build" ]; then
-            sed -i "s/if false # with_clc/if with_clc/g" meson.build 2>/dev/null || true
-            sed -i "s/if false # dep_llvm.found()/if dep_llvm.found()/g" meson.build 2>/dev/null || true
-            sed -i "s/dep_llvm = null_dep//g" meson.build 2>/dev/null || true
-          fi
-          
-          echo "-> Purgando parches manuales previos en src/util/meson.build..."
-          if [ -f "src/util/meson.build" ]; then
-            sed -i "s/if false # with_platform_android/if with_platform_android/g" src/util/meson.build 2>/dev/null || true
-          fi
-
       - name: Patch anon_file.c for memfd_create
         run: |
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -42,7 +27,6 @@ jobs:
         with:
           python-version: "3.x"
 
-      # 🟢 CORRECCIÓN: Se actualizan los paquetes de LLVM y CLC a la versión explícita 18 compatible
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
@@ -61,8 +45,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-          # Inyección del Shim libclc en el Host para satisfacer el Setup raíz de la máquina virtual
+          # Aseguramos la ruta global de manifiestos del sistema
           sudo mkdir -p /usr/lib/pkgconfig
+
+          # Inyección del Shim libclc en el Host
           sudo cat << 'EOF' | sudo tee /usr/lib/pkgconfig/libclc.pc
           Name: libclc
           Description: Standalone libclc stub for Mesa host tools compilation
@@ -71,7 +57,16 @@ jobs:
           Libs: 
           EOF
 
-      # GENERACIÓN DE EMULADORES DE HOST: Rompe el bloqueo de herramientas cruzadas e híbridas de clc
+          # 🟢 INYECCIÓN DEL SHIM LLVMSPIRVLIB: Rompe el bloqueo de traducción de OpenCL en el host
+          sudo cat << 'EOF' | sudo tee /usr/lib/pkgconfig/LLVMSPIRVLib.pc
+          Name: LLVMSPIRVLib
+          Description: Standalone LLVMSPIRVLib stub for Mesa host tools compilation
+          Version: 18.0.0
+          Cflags: -I/usr/include
+          Libs: 
+          EOF
+
+      # GENERACIÓN DE HERRAMIENTAS DE HOST: Leerá ambos stubs .pc y pasará limpio a Ninja
       - name: Generate Host Tools
         run: |
           meson setup build-host \
@@ -92,7 +87,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
 
-      # CONFIGURACIÓN DEL CROSS-FILE NATIVO DEL NDK DE GOOGLE
+      # CONFIGURACIÓN DEL ENTORNO DE COMPILACIÓN CRUZADA (ANDROID AARCH64)
       - name: Configure Cross-File Matrix
         run: |
           cat << 'EOF' > android-cross.txt
@@ -114,7 +109,7 @@ jobs:
           EOF
           envsubst < android-cross.txt > android-cross-compiled.txt
 
-      # CONFIGURACIÓN DE MESON PURA DE VULKAN PANVK
+      # FASE CENTRAL DE CONFIGURACIÓN DEL DRIVER VULKAN PANVK PURIFICADO
       - name: Configure Meson
         run: |
           meson setup build \
@@ -141,6 +136,7 @@ jobs:
               -Dllvm=disabled \
               -Dpanfrost-kmds=kbase,panthor
 
+      # COMPILACIÓN DEL BINARIO GRÁFICO FINAL
       - name: Compile Project
         run: |
           meson compile -C build
@@ -148,6 +144,7 @@ jobs:
       - name: Grant Execute Permissions to Package Script
         run: chmod +x ci-scripts/*.sh
 
+      # RESCATE Y MUTACIÓN EXTERNA COMPATIBLE CON WINLATOR
       - name: Structure and Pack Final Container Package
         run: ./ci-scripts/package_wrapper.sh
 
