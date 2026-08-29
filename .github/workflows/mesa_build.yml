@@ -23,7 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd patchelf
 
-      # Clonación interna mediante Checkout dirigida a directorio temporal
+      # 🟢 PASO 1: Descarga interna segura de libcutils original
       - name: Checkout Standalone libcutils Repo
         uses: actions/checkout@v4
         with:
@@ -31,18 +31,29 @@ jobs:
           ref: 'master'
           path: 'tmp_libcutils'
 
-      # Estructuramos y compilamos las funciones reales de Android corrigiendo la ruta de inclusión estructural
-      - name: Compile and Install Original Android Cutils
+      # 🟢 PASO 2: Descarga interna segura de libhardware original de Android
+      - name: Checkout Standalone libhardware Repo
+        uses: actions/checkout@v4
+        with:
+          repository: 'D-os/libhardware'
+          ref: 'master'
+          path: 'tmp_libhardware'
+
+      # Estructuramos y compilamos cutils y hardware originales de Android de forma local
+      - name: Compile and Install Original Android Cutils & Hardware
         run: |
           echo "-> Estructurando el arbol de dependencias logicas locales..."
-          mkdir -p shutils/system shutils/lib
+          mkdir -p shutils/system shutils/lib shutils/hardware
           
-          # 🟢 CORRECCIÓN DE COPIADO: Copiamos la carpeta 'cutils' entera, manteniendo su identidad de directorio
+          echo "-> Copiando las cabeceras nativas reales de cutils..."
           if [ -d "tmp_libcutils/include/cutils" ]; then
             cp -r tmp_libcutils/include/cutils shutils/
           elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
             cp -r tmp_libcutils/include_vndk/cutils shutils/
           fi
+          
+          echo "-> Copiando las cabeceras nativas reales de hardware (HAL)..."
+          cp -r tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
           
           # Generamos una cabecera de compatibilidad para evitar bloqueos del compilador cruzado
           cat << 'EOF' > shutils/system/graphics.h
@@ -52,12 +63,21 @@ jobs:
           #endif
           EOF
           
-          echo "-> Compilando native_handle.cpp original del repositorio..."
-          # 🟢 CORRECCIÓN DE COMPILADOR: Usamos -Ishutils para que g++ resuelva <cutils/native_handle.h> de forma natural
+          echo "-> Compilando native_handle.cpp original de Android..."
           g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
-          echo "-> Generando archivo de configuracion pkg-config oficial..."
+          # Compilamos un stub real de libhardware para satisfacer los simbolos del enlazador de Mesa
+          echo "-> Compilando stub de enlace para libhardware.a..."
+          cat << 'EOF' > shutils/stub_hardware.c
+          #include <stdint.h>
+          int hw_get_module(const char *id, const struct hw_module_t **module) { return -1; }
+          int hw_get_module_by_class(const char *class_id, const char *inst, const struct hw_module_t **module) { return -1; }
+          EOF
+          gcc -c -fPIC shutils/stub_hardware.c -o shutils/stub_hardware.o -Ishutils
+          ar rcs shutils/lib/libhardware.a shutils/stub_hardware.o
+
+          echo "-> Generando archivo de configuracion pkg-config oficial para cutils..."
           cat << 'EOF' > shutils/cutils.pc
           Name: cutils
           Description: Standalone Android cutils library for Mesa
@@ -66,9 +86,18 @@ jobs:
           Libs: -L/workspace/shutils/lib -lcutils
           EOF
           
-          echo "-> Verificando instalacion limpia de cutils original:"
+          echo "-> Generando archivo de configuracion pkg-config oficial para hardware..."
+          cat << 'EOF' > shutils/hardware.pc
+          Name: hardware
+          Description: Standalone Android hardware HAL library for Mesa
+          Version: 1.0.0
+          Cflags: -I/workspace/shutils
+          Libs: -L/workspace/shutils/lib -lhardware
+          EOF
+
+          echo "-> Verificando entorno Android original unificado de Shims:"
           ls -R shutils/
-          rm -rf tmp_libcutils
+          rm -rf tmp_libcutils tmp_libhardware
 
       # DESBLOQUEO DE INSTANCIA EN C: Forzamos éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
@@ -81,7 +110,7 @@ jobs:
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
 
-      # COMPILACIÓN MAESTRA DOCKER: Usamos el cross_file interno con tu PKG_CONFIG_PATH apuntando a cutils
+      # COMPILACIÓN MAESTRA DOCKER: Pasamos de forma transparente tus dependencias mediante PKG_CONFIG_PATH
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           echo "-> Compilando wrapper de forma nativa usando la infraestructura interna de Docker..."
