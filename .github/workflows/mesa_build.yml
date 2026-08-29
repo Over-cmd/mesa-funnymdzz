@@ -31,7 +31,7 @@ jobs:
           ref: 'master'
           path: 'tmp_libcutils'
 
-      # 🟢 CLONACIÓN SEGURA DE LIBHARDWARE ORIGINAL: Usamos tu hallazgo oficial para alimentarlo sin red inestable
+      # Clonación segura de libhardware original de Android
       - name: Checkout Standalone libhardware Repo
         uses: actions/checkout@v4
         with:
@@ -39,11 +39,11 @@ jobs:
           ref: 'buster'
           path: 'tmp_libhardware'
 
-      # Ensamblamos, estructuramos y compilamos las dos instalaciones originales de Android de forma local
+      # Ensamblamos, estructuramos y compilamos las instalaciones originales de Android de forma local
       - name: Compile and Install Original Android Cutils & Hardware
         run: |
           echo "-> Estructurando el arbol de dependencias logicas locales..."
-          mkdir -p shutils/system shutils/lib shutils/hardware
+          mkdir -p shutils/system shutils/lib shutils/hardware shutils/log
           
           echo "-> Copiando las cabeceras nativas de cutils..."
           if [ -d "tmp_libcutils/include/cutils" ]; then
@@ -55,6 +55,19 @@ jobs:
           echo "-> Copiando las cabeceras nativas reales de hardware HAL encontradas..."
           cp -r tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
           
+          # 🟢 INYECCIÓN CRÍTICA DE STUB LOG: Creamos las macros de registro que exige hardware.c
+          cat << 'EOF' > shutils/log/log.h
+          #ifndef ANDROID_LOG_H
+          #define ANDROID_LOG_H
+          #define ALOGD(...) ((void)0)
+          #define ALOGI(...) ((void)0)
+          #define ALOGW(...) ((void)0)
+          #define ALOGE(...) ((void)0)
+          #define ALOGV(...) ((void)0)
+          #define ALOGE_IF(...) ((void)0)
+          #endif
+          EOF
+
           # Generamos una cabecera de compatibilidad para evitar bloqueos del cargador cruzado
           cat << 'EOF' > shutils/system/graphics.h
           #ifndef SYSTEM_GRAPHICS_H_
@@ -68,7 +81,7 @@ jobs:
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
           echo "-> Compilando hardware.c original de tu nuevo repositorio..."
-          # Compilamos el núcleo físico del HAL original que detectó tu búsqueda
+          # Compilamos el HAL original inyectando las dependencias internas de shutils
           gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils
           ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
 
