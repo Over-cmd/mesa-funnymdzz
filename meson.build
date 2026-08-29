@@ -1050,7 +1050,7 @@ with_libbacktrace = get_option('android-libbacktrace') \
   .disable_auto_if(not with_platform_android) \
   .allowed()
 
-if with_platform_android
+if false # with_platform_android
   dep_android_ui = null_dep
   dep_android_mapper4 = null_dep
   if not with_android_stub
