@@ -38,20 +38,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-      # 🟢 PASO MAESTRO: Concedemos permisos totales de ejecución a toda tu artillería de scripts locales
+      # Concedemos permisos totales de ejecución a tu artillería de scripts locales
       - name: Grant Execute Permissions to Local Scripts
         run: |
           chmod +x setup.sh compile.sh log.sh push.sh 2>/dev/null || true
           chmod +x ci-scripts/*.sh 2>/dev/null || true
 
-      # 🟢 CONFIGURACIÓN NATIVA: Ejecutamos tu setup.sh oficial usando tu android.toml del repositorio
+      # 🟢 PASO MAESTRO: Forzamos la exportación de las variables que exige de forma estricta tu android.toml
       - name: Run Native Setup Script
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
+          echo "-> Mapeando variables de entorno dinámicas para android.toml..."
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
+          
+          echo "-> ANDROID_NDK_HOME fijado en: $ANDROID_NDK_HOME"
+          echo "-> MESON_WORKING_DIR fijado en: $MESON_WORKING_DIR"
+          
+          # Ejecutamos tu script original de inicialización con el entorno inyectado
           ./setup.sh
 
-      # 🟢 COMPILACIÓN NATIVA: Tu script compile.sh se encarga de compilar y aplicar los empaquetados
+      # Tu script compile.sh se encarga de compilar y aplicar los empaquetados
       - name: Compile Project via Local Engine
         run: |
           ./compile.sh
