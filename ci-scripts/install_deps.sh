@@ -122,7 +122,7 @@ EOF
 gcc -c -fPIC shutils/stub_sync.c -o shutils/stub_sync.o -Ishutils
 ar rcs shutils/lib/libsync.a shutils/stub_sync.o
 
-# Generamos manifiestos pkg-config oficiales apuntando rigidamente a /workspace/shutils
+# Generamos manifiestos pkg-config oficiales
 cat << 'EOF' > shutils/cutils.pc
 Name: cutils
 Description: Standalone Android cutils library for Mesa
@@ -174,6 +174,14 @@ EOF
 cat << 'EOF' > shutils/hidlbase.pc
 Name: hidlbase
 Description: Android hidlbase stub for Mesa compilation
+Version: 1.0.0
+Cflags: -I/workspace/shutils
+Libs: 
+EOF
+
+cat << 'EOF' > shutils/utils.pc
+Name: utils
+Description: Android libutils stub for Mesa compilation
 Version: 1.0.0
 Cflags: -I/workspace/shutils
 Libs: 
