@@ -31,7 +31,7 @@ jobs:
       - name: Apply C bypass Patches to PanVK
         run: ./ci-scripts/patch_source.sh
 
-      # COMPILACIÓN MAESTRA DOCKER: Al haber fijado 'if false', Meson pasará de largo y Ninja compilará tu driver nativo wrapper
+      # COMPILACIÓN MAESTRA DOCKER: Meson pasará de largo la verificación y Ninja compilará tu driver
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
