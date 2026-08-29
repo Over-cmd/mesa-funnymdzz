@@ -6,9 +6,10 @@
 # util is self contained.
 inc_util = [inc_include, include_directories('..')]
 
-if with_platform_android
-subdir('u_gralloc')
+if false # with_platform_android
+  subdir('u_gralloc')
 endif
+
 
 subdir('blake3')
 
