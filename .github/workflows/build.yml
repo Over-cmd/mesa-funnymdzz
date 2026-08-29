@@ -48,16 +48,19 @@ jobs:
           # CREACIÓN DE SHIMS LOCALES PARA EL ENTORNO DEL HOST
           mkdir -p ${{ github.workspace }}/host-shims
 
-          # Generación del Shim libclc local
+          # 🟢 CORRECCIÓN CENTRAL: Se inyecta 'includedir' exigido por el compilador clc en la línea 44
           cat << 'EOF' > ${{ github.workspace }}/host-shims/libclc.pc
+          prefix=/usr
+          includedir=${prefix}/include
+
           Name: libclc
           Description: Standalone libclc stub for Mesa host tools compilation
           Version: 1.0.0
-          Cflags: -I/usr/include
+          Cflags: -I${includedir}
           Libs: 
           EOF
 
-          # 🟢 CORRECCIÓN CENTRAL: Forzamos la versión 18.1.0 exigida rígidamente por Meson
+          # Generación del Shim LLVMSPIRVLib local
           cat << 'EOF' > ${{ github.workspace }}/host-shims/LLVMSPIRVLib.pc
           Name: LLVMSPIRVLib
           Description: Standalone LLVMSPIRVLib stub for Mesa host tools compilation
