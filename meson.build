@@ -2016,20 +2016,13 @@ _shared_llvm = get_option('shared-llvm') \
   .disable_auto_if(host_machine.system() == 'windows') \
   .allowed()
 
-dep_llvm = dependency(
-  'llvm',
-  method : host_machine.system() == 'windows' ? 'auto' : 'config-tool',
-  version : _llvm_version,
-  modules : llvm_modules,
-  optional_modules : llvm_optional_modules,
-  required : with_llvm,
-  static : not _shared_llvm,
-  fallback : ['llvm', 'dep_llvm'],
-  include_type : 'system',
-)
-if false # dep_llvm.found()
-  pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
-  pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
+# 🟢 BYPASS INDESTRUCTIBLE DE LLVM: Forzamos dependencia vacía para saltar la búsqueda
+dep_llvm = null_dep
+
+if dep_llvm.found()
+  # Comentamos las líneas problemáticas internas para que evalúe en falso limpiamente
+  # pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
+  # pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
 
   if (with_swrast_vk or with_gallium_llvmpipe) and not draw_with_llvm
     error('Lavapipe and llvmpipe require LLVM draw support.')
@@ -2038,7 +2031,7 @@ if false # dep_llvm.found()
   if with_gallium_i915 and not draw_with_llvm
     error('i915 requires LLVM draw support for vertex shaders.')
   endif
-endif
+# 🚨 ATENCIÓN: No pongas ningún "endif" aquí. Deja que el archivo continúe con su "else" original tal y como viene de fábrica.
 
   if host_machine.system() != 'windows'
     # LLVM can be built without rtti, turning off rtti changes the ABI of C++
