@@ -171,6 +171,14 @@ Cflags: -I/workspace/shutils
 Libs: 
 EOF
 
+cat << 'EOF' > shutils/hidlbase.pc
+Name: hidlbase
+Description: Android hidlbase stub for Mesa compilation
+Version: 1.0.0
+Cflags: -I/workspace/shutils
+Libs: 
+EOF
+
 echo "-> Verificando entorno unificado completo de Shims de Android:"
 ls -R shutils/
 rm -rf tmp_libcutils tmp_libhardware
