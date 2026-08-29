@@ -37,7 +37,9 @@ endif
 
 subdir('compiler')
 
-# 🟢 BYPASS DE ARQUITECTURA CRUZADA: Anulamos clc para evitar la mezcla de librerías x86_64 y AArch64
+# 🟢 INYECCIÓN DE EMERGENCIA: Declaramos la variable vacía para que libpan no colapse al no compilar clc
+prog_mesa_clc = null_dep
+
 if false # with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
   subdir('clc')
 endif
