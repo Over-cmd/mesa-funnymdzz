@@ -139,7 +139,6 @@ jobs:
           echo "-> Ejecutando compilación cruzada hacia Android ARM64..."
           meson compile -C build
 
-      # 🟢 EMPAQUETADO FIEL: Forzamos la estructura exacta que exige el instalador de Bannerlator
       - name: Structure and Pack wrapper.tzst for Bannerlator
         run: |
           echo "-> Creando estructura limpia para el cargador de Android..."
@@ -152,7 +151,9 @@ jobs:
             
             echo "-> Reescribiendo el SONAME interno para evitar rechazos en Android..."
             patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
-            strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
+            
+            # 🟢 CORRECCIÓN CENTRAL: Usamos llvm-strip (compatible con ARM64) en vez de strip genérico
+            llvm-strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
           else
             echo "ERROR: ¡El NDK no generó el binario .so esperado!" && exit 1
           fi
@@ -180,7 +181,6 @@ jobs:
           }
           EOF
 
-          # Generamos el archivo de configuración ambiental requerido para desatar la aceleración de Bifrost
           echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
 
           echo "msf:315508" > pkg/usr/version.txt
