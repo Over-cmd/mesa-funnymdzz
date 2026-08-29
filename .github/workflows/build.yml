@@ -31,14 +31,14 @@ jobs:
       - name: Apply C bypass Patches to PanVK
         run: ./ci-scripts/patch_source.sh
 
-      # COMPILACIÓN MAESTRA DOCKER: Con -Degl=disabled para saltar el error de glapi_xml_py_deps
+      # 🟢 COMPILACIÓN MAESTRA DOCKER: Ajustado el comando Ninja al target de compilación nativo universal
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
             rm -rf ${{ env.BUILD_DIR }} && \
             meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Degl=disabled -Dbuildtype=release && \
-            ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
+            ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/ && \
             chmod -R 777 ${{ env.BUILD_DIR }}
           "
 
