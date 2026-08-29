@@ -2012,6 +2012,21 @@ _shared_llvm = get_option('shared-llvm') \
   .disable_auto_if(host_machine.system() == 'windows') \
   .allowed()
 
+# 🟢 INYECCIÓN REGLAMENTARIA: Inicializa la variable que causaba el fallo sintáctico
+dep_llvm = null_dep
+if with_llvm
+  dep_llvm = dependency(
+    'llvm',
+    method : host_machine.system() == 'windows' ? 'auto' : 'config-tool',
+    version : _llvm_version,
+    modules : llvm_modules,
+    optional_modules : llvm_optional_modules,
+    required : true,
+    static : not _shared_llvm,
+    include_type : 'system',
+  )
+endif
+
 if dep_llvm.found()
   pre_args += '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version())
   pre_args += '-DLLVM_IS_SHARED=@0@'.format(_shared_llvm.to_int())
