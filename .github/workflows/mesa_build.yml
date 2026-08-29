@@ -42,6 +42,7 @@ jobs:
         with:
           python-version: "3.x"
 
+      # 🟢 CORRECCIÓN: Se actualizan los paquetes de LLVM y CLC a la versión explícita 18 compatible
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
@@ -54,9 +55,9 @@ jobs:
               libdrm-dev \
               pkg-config \
               gettext \
-              llvm-dev \
-              libclang-dev \
-              libclc-dev
+              llvm-18-dev \
+              libclang-18-dev \
+              libclc-18-dev
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
