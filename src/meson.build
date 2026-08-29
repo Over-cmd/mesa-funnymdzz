@@ -58,7 +58,7 @@ endif
 if with_platform_x11
   subdir('x11')
 endif
-if with_gallium_or_lvp or with_gbm or with_platform_wayland or with_platform_x11
+if true # with_gallium_or_lvp or with_gbm or with_platform_wayland or with_platform_x11
   subdir('loader')
 endif
 subdir('compiler')
@@ -101,7 +101,7 @@ endif
 if with_any_intel
   subdir('intel')
 endif
-if with_gallium_panfrost or with_gallium_lima or with_panfrost_vk or with_tools.contains('panfrost')
+if true # with_gallium_panfrost or with_gallium_lima or with_panfrost_vk or with_tools.contains('panfrost')
   subdir('panfrost')
 endif
 if with_microsoft_clc or with_gallium_d3d12 or with_spirv_to_dxil or with_microsoft_vk
