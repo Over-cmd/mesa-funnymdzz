@@ -40,20 +40,21 @@ jobs:
       - name: Compile and Install Original Android Cutils & Hardware
         run: |
           echo "-> Estructurando el arbol de dependencias logicas locales..."
-          mkdir -p shutils/system shutils/lib shutils/log
+          mkdir -p shutils/system shutils/lib shutils/log shutils/hardware
           
-          echo "-> Copiando las carpetas de cabeceras manteniendo su estructura..."
+          echo "-> Copiando las carpetas de cabeceras de cutils..."
           if [ -d "tmp_libcutils/include/cutils" ]; then
             cp -r tmp_libcutils/include/cutils shutils/
           elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
             cp -r tmp_libcutils/include_vndk/cutils shutils/
           fi
           
-          # 🟢 CORRECCIÓN: Copiamos la estructura completa del directorio para resolver <hardware/hardware.h>
-          mkdir -p shutils/hardware
-          cp -r tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
-          cp -r tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
+          echo "-> Copiando las carpetas de cabeceras de LineageOS HAL..."
+          # 🟢 CORRECCIÓN DE COPIADO: Volcamos el contenido garantizando la existencia de la estructura plana
+          cp -rf tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
+          cp -rf tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
           
+          # Inyectamos el log de control local
           cat << 'EOF' > shutils/log/log.h
           #ifndef ANDROID_LOG_H
           #define ANDROID_LOG_H
@@ -66,6 +67,7 @@ jobs:
           #endif
           EOF
 
+          # Generamos una cabecera de compatibilidad para evitar bloqueos del cargador cruzado
           cat << 'EOF' > shutils/system/graphics.h
           #ifndef SYSTEM_GRAPHICS_H_
           #define SYSTEM_GRAPHICS_H_
@@ -78,7 +80,8 @@ jobs:
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
           echo "-> Compilando hardware.c nativo de LineageOS..."
-          gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils
+          # 🟢 CORRECCIÓN DE COMPILADOR: Agregamos -I. -Ishutils/hardware para resolver la ruta cruzada de LineageOS
+          gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Ishutils/hardware -I.
           ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
 
           cat << 'EOF' > shutils/cutils.pc
@@ -118,6 +121,7 @@ jobs:
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
             export PKG_CONFIG_PATH=/workspace/shutils && \
+            rm -rf ${{ env.BUILD_DIR }} && \
             meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
             ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
             chmod -R 777 ${{ env.BUILD_DIR }}
