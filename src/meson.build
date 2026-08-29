@@ -157,7 +157,7 @@ else
   dep_gbm = null_dep
 endif
 
-if false with_egl
+if false # with_egl
   subdir('egl')
 endif
 if with_gallium
