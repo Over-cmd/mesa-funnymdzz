@@ -10,7 +10,6 @@ if false # with_platform_android
   subdir('u_gralloc')
 endif
 
-
 subdir('blake3')
 
 files_mesa_util = files(
