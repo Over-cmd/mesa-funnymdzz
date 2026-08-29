@@ -5,8 +5,8 @@ ndk_bin = ndk_home / 'toolchains/llvm/prebuilt/linux-x86_64/bin'
 ndk_sysroot = ndk_home / 'toolchains/llvm/prebuilt/linux-x86_64/sysroot'
 
 [binaries]
-c = [ndk_bin / 'aarch64-linux-android-clang', '-target', 'aarch64-linux-android30', '-D__TERMUX__']
-cpp = [ndk_bin / 'aarch64-linux-android-clang++',
+c = [ndk_bin / 'clang', '-target', 'aarch64-linux-android30', '-D__TERMUX__']
+cpp = [ndk_bin / 'clang++',
         '-target', 'aarch64-linux-android30',
         '-fno-exceptions',
         '--start-no-unused-arguments',
