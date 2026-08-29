@@ -2014,7 +2014,7 @@ _shared_llvm = get_option('shared-llvm') \
 
 # 🟢 INYECCIÓN REGLAMENTARIA: Inicializa la variable que causaba el fallo sintáctico
 dep_llvm = null_dep
-if with_llvm
+if with_llvm.allowed()
   dep_llvm = dependency(
     'llvm',
     method : host_machine.system() == 'windows' ? 'auto' : 'config-tool',
