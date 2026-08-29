@@ -20,39 +20,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Checkout Standalone libcutils Repo
-        uses: actions/checkout@v4
-        with:
-          repository: 'D-os/libcutils'
-          ref: 'master'
-          path: 'tmp_libcutils'
-
-      - name: Checkout LineageOS libhardware Repo
-        uses: actions/checkout@v4
-        with:
-          repository: 'LineageOS/android_hardware_libhardware'
-          ref: 'lineage-23.2'
-          path: 'tmp_libhardware'
+      - name: Install Zstd Packager
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd patchelf
 
       - name: Grant Execute Permissions to CI Scripts
         run: chmod +x ci-scripts/*.sh
 
-      - name: Compile and Install Android Base Shims
-        run: ./ci-scripts/install_deps.sh
-
       - name: Apply C bypass Patches to PanVK
         run: ./ci-scripts/patch_source.sh
 
-      # 🟢 CORRECCIÓN CENTRAL: Se elimina -Dpkg_config_libdir y se unifica la búsqueda con --pkg-config-path oficial de Meson
+      # COMPILACIÓN MAESTRA DOCKER: Meson pasará directo y Ninja compilará tu driver nativo wrapper
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
-            export PKG_CONFIG_PATH=/workspace/shutils && \
-            export PKG_CONFIG_LIBDIR=/workspace/shutils && \
-            export PKG_CONFIG_SYSROOT_DIR=/ && \
             rm -rf ${{ env.BUILD_DIR }} && \
-            meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt --pkg-config-path=/workspace/shutils -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
+            meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
             ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
             chmod -R 777 ${{ env.BUILD_DIR }}
           "
