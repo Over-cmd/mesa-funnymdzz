@@ -77,20 +77,6 @@ jobs:
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
 
-      # 🟢 PASO DE RESCATE: Crea accesos directos de los nombres de compilador viejos que busca android.toml hacia el clang moderno
-      - name: Inject Google NDK Compiler Aliases
-        run: |
-          echo "-> Localizando binarios dentro del Android NDK provisto por el entorno..."
-          NDK_BIN_DIR="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          if [ -d "$NDK_BIN_DIR" ]; then
-            echo "-> Generando alias simbólicos para desatascar a Meson..."
-            sudo ln -sf "$NDK_BIN_DIR/clang" "$NDK_BIN_DIR/aarch64-linux-android-clang"
-            sudo ln -sf "$NDK_BIN_DIR/clang++" "$NDK_BIN_DIR/aarch64-linux-android-clang++"
-            echo "-> ¡Alias inyectados correctamente!"
-          else
-            echo "🚨 ERROR: No se encontró el árbol de binarios del NDK." && exit 1
-          fi
-
       - name: Configure Cross-Compilation (Meson NDK)
         env:
           PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
