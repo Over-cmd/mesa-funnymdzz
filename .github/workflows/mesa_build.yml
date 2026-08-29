@@ -49,8 +49,7 @@ jobs:
             cp -r tmp_libcutils/include_vndk/cutils shutils/
           fi
           
-          echo "-> Copiando las carpetas de cabeceras de LineageOS HAL..."
-          # 🟢 CORRECCIÓN DE COPIADO: Volcamos el contenido garantizando la existencia de la estructura plana
+          echo "-> Copiando cabeceras HAL de LineageOS al entorno global de Shims..."
           cp -rf tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
           cp -rf tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
           
@@ -80,8 +79,8 @@ jobs:
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
           echo "-> Compilando hardware.c nativo de LineageOS..."
-          # 🟢 CORRECCIÓN DE COMPILADOR: Agregamos -I. -Ishutils/hardware para resolver la ruta cruzada de LineageOS
-          gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Ishutils/hardware -I.
+          # 🟢 CORRECCIÓN: Agregamos -Itmp_libhardware/include para resolver de manera nativa la firma interna de LineageOS
+          gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Itmp_libhardware/include -I.
           ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
 
           cat << 'EOF' > shutils/cutils.pc
