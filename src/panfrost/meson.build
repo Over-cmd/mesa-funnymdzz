@@ -37,7 +37,8 @@ endif
 
 subdir('compiler')
 
-if true # with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
+# 🟢 BYPASS DE ARQUITECTURA CRUZADA: Anulamos clc para evitar la mezcla de librerías x86_64 y AArch64
+if false # with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
   subdir('clc')
 endif
 
