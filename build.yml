@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        build-type: [release] # Puedes añadir debugoptimized si quieres hacer pruebas de desarrollo
+        build-type: [release]
 
     steps:
       - name: Checkout Source
@@ -69,12 +69,28 @@ jobs:
             
           ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
           
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-cl-dummy" 2>/dev/null || true
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
           
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
+
+      - name: Inject Google NDK Compiler Aliases
+        run: |
+          echo "-> Detectando ruta real del Android NDK provisto por el entorno..."
+          NDK_BIN_DIR="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          
+          if [ -d "$NDK_BIN_DIR" ]; then
+            echo "-> NDK localizado geográficamente en: $NDK_BIN_DIR"
+            echo "-> Generando alias simbólicos para desatascar los binarios..."
+            sudo ln -sf "$NDK_BIN_DIR/clang" "$NDK_BIN_DIR/aarch64-linux-android-clang"
+            sudo ln -sf "$NDK_BIN_DIR/clang++" "$NDK_BIN_DIR/aarch64-linux-android-clang++"
+            echo "-> ¡Alias inyectados correctamente!"
+          else
+            echo "🚨 ERROR CRÍTICO: No se pudo localizar la carpeta de binarios en $NDK_BIN_DIR" && exit 1
+          fi
 
       - name: Configure Cross-Compilation (Meson NDK)
         env:
@@ -157,7 +173,7 @@ jobs:
           EOF
 
           sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_icd.arm.json
+          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
           
           echo "-> Ajustando permisos globales..."
           chmod 755 pkg/usr pkg/usr/lib pkg/usr/share pkg/usr/share/vulkan pkg/usr/share/vulkan/icd.d
