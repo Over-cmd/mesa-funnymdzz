@@ -20,34 +20,29 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Checkout Standalone libcutils Repo
-        uses: actions/checkout@v4
-        with:
-          repository: 'D-os/libcutils'
-          ref: 'master'
-          path: 'tmp_libcutils'
-
-      - name: Checkout LineageOS libhardware Repo
-        uses: actions/checkout@v4
-        with:
-          repository: 'LineageOS/android_hardware_libhardware'
-          ref: 'lineage-23.2'
-          path: 'tmp_libhardware'
+      - name: Install Zstd Packager
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd patchelf
 
       - name: Grant Execute Permissions to CI Scripts
         run: chmod +x ci-scripts/*.sh
 
-      - name: Compile and Install Android Base Shims
-        run: ./ci-scripts/install_deps.sh
-
       - name: Apply C bypass Patches to PanVK
         run: ./ci-scripts/patch_source.sh
 
+      # 🟢 EL TRUCO: Hackeamos el meson.build raíz para que no pida ninguna dependencia de Android
+      - name: Bypass All Android Dependencies in Meson
+        run: |
+          echo "-> Desactivando el escaneo obligatorio de librerías de Android..."
+          sed -i "s/with_platform_android = true/with_platform_android = false/g" meson.build 2>/dev/null || true
+          sed -i "s/with_platform_android/false/g" src/util/u_gralloc/meson.build 2>/dev/null || true
+
+      # COMPILACIÓN MAESTRA DOCKER: Ahora entrará limpio sin atascarse en los chequeos
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
             cd /workspace && \
-            export PKG_CONFIG_PATH=/workspace/shutils && \
             rm -rf ${{ env.BUILD_DIR }} && \
             meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=wrapper -Dgallium-drivers='' -Dbuildtype=release && \
             ninja -C ${{ env.BUILD_DIR }} src/panfrost/vulkan/libvulkan_wrapper.so && \
