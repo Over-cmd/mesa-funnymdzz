@@ -78,8 +78,9 @@ jobs:
           g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
-          echo "-> Inyectando soporte booleano stdbool.h en hardware.c..."
-          sed -i '1s/^/#include <stdbool.h>\n/' tmp_libhardware/hardware.c
+          # 🟢 CORRECCIÓN CRÍTICA: Inyectamos limits.h y stdlib.h para declarar PATH_MAX y realpath de forma reglamentaria
+          echo "-> Inyectando soporte stdbool.h, limits.h y stdlib.h en hardware.c..."
+          sed -i '1s/^/#include <stdbool.h>\n#include <limits.h>\n#include <stdlib.h>\n/' tmp_libhardware/hardware.c
           
           echo "-> Compilando hardware.c nativo de LineageOS..."
           gcc -c -fPIC -std=c11 tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Itmp_libhardware/include -I.
