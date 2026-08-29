@@ -18,6 +18,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 🟢 PURGA EN CALIENTE: revierte los "if false" residuales para evitar errores sintácticos
+      - name: Purge Legacy Code Patches and Restore Factory Sources
+        run: |
+          echo "-> Purgando parches manuales previos en meson.build raiz..."
+          if [ -f "meson.build" ]; then
+            sed -i "s/if false # with_clc/if with_clc/g" meson.build 2>/dev/null || true
+            sed -i "s/if false # dep_llvm.found()/if dep_llvm.found()/g" meson.build 2>/dev/null || true
+            sed -i "s/dep_llvm = null_dep//g" meson.build 2>/dev/null || true
+          fi
+          
+          echo "-> Purgando parches manuales previos en src/util/meson.build..."
+          if [ -f "src/util/meson.build" ]; then
+            sed -i "s/if false # with_platform_android/if with_platform_android/g" src/util/meson.build 2>/dev/null || true
+          fi
+
       - name: Patch anon_file.c for memfd_create
         run: |
           sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -45,7 +60,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-      # GENERACIÓN DE EMULADORES DE HOST: Ahora con llvm=enabled y mesa-clc=enabled reglamentario para x86_64
+          # Inyección del Shim libclc en el Host para satisfacer el Setup raíz de la máquina virtual
+          sudo mkdir -p /usr/lib/pkgconfig
+          sudo cat << 'EOF' | sudo tee /usr/lib/pkgconfig/libclc.pc
+          Name: libclc
+          Description: Standalone libclc stub for Mesa host tools compilation
+          Version: 1.0.0
+          Cflags: -I/usr/include
+          Libs: 
+          EOF
+
+      # GENERACIÓN DE EMULADORES DE HOST: Rompe el bloqueo de herramientas cruzadas e híbridas de clc
       - name: Generate Host Tools
         run: |
           meson setup build-host \
@@ -60,6 +85,7 @@ jobs:
 
           ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2
 
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-cl-dummy"
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
@@ -87,7 +113,7 @@ jobs:
           EOF
           envsubst < android-cross.txt > android-cross-compiled.txt
 
-      # CONFIGURACIÓN DE MESON PURA DE VULKAN PANVK (Aislado de LLVM para tu celular)
+      # CONFIGURACIÓN DE MESON PURA DE VULKAN PANVK
       - name: Configure Meson
         run: |
           meson setup build \
@@ -111,7 +137,8 @@ jobs:
               -Dmesa-clc=system \
               -Dprecomp-compiler=system \
               -Dvulkan-drivers=panfrost \
-              -Dllvm=disabled
+              -Dllvm=disabled \
+              -Dpanfrost-kmds=kbase,panthor
 
       - name: Compile Project
         run: |
