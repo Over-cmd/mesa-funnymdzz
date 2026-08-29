@@ -6,7 +6,6 @@ sudo apt-get update
 sudo apt-get install -y zstd patchelf
 
 echo "-> Estructurando el arbol de dependencias logicas locales..."
-# Aseguramos que la carpeta raíz sea estrictamente shutils para coincidir con el path de Docker
 mkdir -p shutils/system shutils/lib shutils/log shutils/hardware shutils/sync shutils/android
 
 echo "-> Copiando las carpetas de cabeceras de cutils..."
@@ -123,7 +122,7 @@ EOF
 gcc -c -fPIC shutils/stub_sync.c -o shutils/stub_sync.o -Ishutils
 ar rcs shutils/lib/libsync.a shutils/stub_sync.o
 
-# 🟢 MANIFIESTOS PKG-CONFIG CORRECTOS (Todos apuntando rígidamente a /workspace/shutils)
+# Generamos manifiestos pkg-config oficiales apuntando rigidamente a /workspace/shutils
 cat << 'EOF' > shutils/cutils.pc
 Name: cutils
 Description: Standalone Android cutils library for Mesa
