@@ -30,21 +30,18 @@ endif
 subdir('shared')
 subdir('model')
 
-if true # with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
+if with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
    subdir('genxml')
    subdir('lib')
 endif
 
 subdir('compiler')
 
-prog_mesa_clc = null_dep
-
-if false # with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
+if with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
   subdir('clc')
 endif
 
-# 🟢 BYPASS DE OPENGL: Anulamos libpan y perf para que no ejecuten comandos vacíos de clc
-if false # with_gallium_panfrost or with_panfrost_vk
+if with_gallium_panfrost or with_panfrost_vk
    subdir('libpan')
    subdir('perf')
 endif
@@ -73,7 +70,7 @@ bifrost_compiler = executable(
   build_by_default : with_tools.contains('panfrost')
 )
 
-if true # with_panfrost_vk
+if with_panfrost_vk
   subdir('vulkan')
 endif
 
