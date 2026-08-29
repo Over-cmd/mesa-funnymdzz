@@ -23,7 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd patchelf
 
-      # 🟢 DESCARGA SEGURA DE CUTILS NATIVO: Clonación interna mediante Checkout dirigida a directorio temporal
+      # Clonación interna mediante Checkout dirigida a directorio temporal
       - name: Checkout Standalone libcutils Repo
         uses: actions/checkout@v4
         with:
@@ -31,7 +31,7 @@ jobs:
           ref: 'master'
           path: 'tmp_libcutils'
 
-      # Una vez clonado localmente por la acción de GitHub, estructuramos y compilamos las funciones reales
+      # Estructuramos y compilamos las funciones reales de Android corrigiendo la ruta de inclusión
       - name: Compile and Install Original Android Cutils
         run: |
           echo "-> Estructurando el arbol de dependencias logicas locales..."
@@ -50,7 +50,8 @@ jobs:
           EOF
           
           echo "-> Compilando native_handle.cpp original del repositorio..."
-          g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils/include -Ishutils
+          # 🟢 CORRECCIÓN: Añadimos -I. para que resuelva la ruta interna <cutils/native_handle.h> usando la estructura de la carpeta shutils
+          g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils -I.
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
           echo "-> Generando archivo de configuracion pkg-config oficial..."
