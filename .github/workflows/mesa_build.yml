@@ -1,4 +1,4 @@
-name: Android NDK Build (PanVK Native)
+name: Android NDK Build (PanVK Native via Repo Shims)
 
 on:
   push:
@@ -38,56 +38,11 @@ jobs:
               flex \
               libdrm-dev \
               pkg-config \
-              gettext \
-              llvm-18-dev \
-              libclang-18-dev \
-              libclc-18-dev
+              gettext
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-          # Aseguramos la ruta global de manifiestos del sistema
-          sudo mkdir -p /usr/lib/pkgconfig
-
-          # Inyección del Shim libclc en el Host
-          sudo cat << 'EOF' | sudo tee /usr/lib/pkgconfig/libclc.pc
-          Name: libclc
-          Description: Standalone libclc stub for Mesa host tools compilation
-          Version: 1.0.0
-          Cflags: -I/usr/include
-          Libs: 
-          EOF
-
-          # 🟢 INYECCIÓN DEL SHIM LLVMSPIRVLIB: Rompe el bloqueo de traducción de OpenCL en el host
-          sudo cat << 'EOF' | sudo tee /usr/lib/pkgconfig/LLVMSPIRVLib.pc
-          Name: LLVMSPIRVLib
-          Description: Standalone LLVMSPIRVLib stub for Mesa host tools compilation
-          Version: 18.0.0
-          Cflags: -I/usr/include
-          Libs: 
-          EOF
-
-      # GENERACIÓN DE HERRAMIENTAS DE HOST: Leerá ambos stubs .pc y pasará limpio a Ninja
-      - name: Generate Host Tools
-        run: |
-          meson setup build-host \
-              -Dplatforms=[] \
-              -Dgallium-drivers=[] \
-              -Dvulkan-drivers=[] \
-              -Dtools=panfrost \
-              -Dprecomp-compiler=enabled \
-              -Dinstall-precomp-compiler=true \
-              -Dllvm=enabled \
-              -Dmesa-clc=enabled -Dinstall-mesa-clc=true
-
-          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2
-
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-cl-dummy"
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
-          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
-          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
-
-      # CONFIGURACIÓN DEL ENTORNO DE COMPILACIÓN CRUZADA (ANDROID AARCH64)
+      # CONFIGURACIÓN DEL CROSS-FILE NATIVO DEL NDK DE GOOGLE
       - name: Configure Cross-File Matrix
         run: |
           cat << 'EOF' > android-cross.txt
@@ -109,8 +64,10 @@ jobs:
           EOF
           envsubst < android-cross.txt > android-cross-compiled.txt
 
-      # FASE CENTRAL DE CONFIGURACIÓN DEL DRIVER VULKAN PANVK PURIFICADO
+      # FASE MAESTRA DE CONFIGURACIÓN: Enlazamos obligatoriamente tu carpeta shims nativa del repositorio
       - name: Configure Meson
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
         run: |
           meson setup build \
               --cross-file android-cross-compiled.txt \
@@ -130,13 +87,11 @@ jobs:
               -Dgallium-drivers= \
               -Dshared-glapi=disabled \
               -Dzstd=disabled \
-              -Dmesa-clc=system \
-              -Dprecomp-compiler=system \
               -Dvulkan-drivers=panfrost \
               -Dllvm=disabled \
               -Dpanfrost-kmds=kbase,panthor
 
-      # COMPILACIÓN DEL BINARIO GRÁFICO FINAL
+      # COMPILACIÓN DEL BINARIO GRÁFICO FINAL PANVK
       - name: Compile Project
         run: |
           meson compile -C build
