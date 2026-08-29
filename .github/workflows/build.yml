@@ -1,4 +1,4 @@
-name: Termux-Build of Mesa Vulkan Wrapper
+name: Android NDK Build (PanVK Native)
 
 on:
   push:
@@ -8,39 +8,128 @@ permissions:
   contents: read
 
 jobs:
-  build-aarch64-wrapper:
+  build-android-wrapper:
     runs-on: ubuntu-latest
-    env:
-      BUILD_DIR: build
-      IMAGE_TAG: ghcr.io/leegao/mesa-wrapper-ci/wrapper-compiler:latest
+    strategy:
+      matrix:
+        build-type: [release]
+
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Patch anon_file.c for memfd_create
+        run: |
+          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-      - name: Install Zstd Packager
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd patchelf
+          sudo apt-get install -y \
+              build-essential \
+              libelf-dev \
+              spirv-tools \
+              bison \
+              flex \
+              libdrm-dev \
+              pkg-config \
+              gettext \
+              llvm-dev \
+              libclang-dev \
+              libclc-dev
+          python -m pip install --upgrade pip
+          pip install mako PyYAML meson ninja packaging
 
-      - name: Grant Execute Permissions to CI Scripts
-        run: chmod +x ci-scripts/*.sh
+          # 🟢 INYECCIÓN DEL SHIM LIBCLC EN EL HOST: Satisface el validador raíz sin archivos fantasmas
+          sudo mkdir -p /usr/lib/pkgconfig
+          sudo cat << 'EOF' | sudo tee /usr/lib/pkgconfig/libclc.pc
+          Name: libclc
+          Description: Standalone libclc stub for Mesa host tools compilation
+          Version: 1.0.0
+          Cflags: -I/usr/include
+          Libs: 
+          EOF
 
-      - name: Apply C bypass Patches to PanVK
-        run: ./ci-scripts/patch_source.sh
-
-      # 🟢 COMPILACIÓN MAESTRA PARALELA: Forzamos el setup de ambos vulkan-drivers (panfrost y wrapper) a la vez
-      - name: Run Wrapper Compiler via Guided Docker Container
+      # GENERACIÓN DE EMULADORES DE HOST: Ahora leerá el libclc.pc inyectado y pasará limpio
+      - name: Generate Host Tools
         run: |
-          docker run --rm -v "${{ github.workspace }}:/workspace" --entrypoint /bin/bash ${{ env.IMAGE_TAG }} -c "
-            cd /workspace && \
-            rm -rf ${{ env.BUILD_DIR }} && \
-            meson setup ${{ env.BUILD_DIR }} --cross-file /root/build-config/cross_file.txt -Dplatforms=android -Dvulkan-drivers=panfrost,wrapper -Dgallium-drivers='' -Degl=disabled -Dbuildtype=release && \
-            ninja -C ${{ env.BUILD_DIR }} && \
-            chmod -R 777 ${{ env.BUILD_DIR }}
-          "
+          meson setup build-host \
+              -Dplatforms=[] \
+              -Dgallium-drivers=[] \
+              -Dvulkan-drivers=[] \
+              -Dtools=panfrost \
+              -Dprecomp-compiler=enabled \
+              -Dinstall-precomp-compiler=true \
+              -Dllvm=enabled \
+              -Dmesa-clc=enabled -Dinstall-mesa-clc=true
+
+          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2
+
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-cl-dummy"
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
+          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
+
+      # CONFIGURACIÓN DEL CROSS-FILE NATIVO DEL NDK DE GOOGLE
+      - name: Configure Cross-File Matrix
+        run: |
+          cat << 'EOF' > android-cross.txt
+          [binaries]
+          c = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang'
+          cpp = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++'
+          ar = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          strip = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkg-config = '/usr/bin/pkg-config'
+
+          [properties]
+          needs_exe_wrapper = true
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'aarch64'
+          endian = 'little'
+          EOF
+          envsubst < android-cross.txt > android-cross-compiled.txt
+
+      # CONFIGURACIÓN DE MESON PURA DE VULKAN PANVK (La compilación cruzada hereda el bypass limpio)
+      - name: Configure Meson
+        run: |
+          meson setup build \
+              --cross-file android-cross-compiled.txt \
+              -Dbuildtype=${{ matrix.build-type }} \
+              -Dplatforms=android \
+              -Dandroid-stub=true \
+              -Dandroid-libbacktrace=disabled \
+              -Dplatform-sdk-version=30 \
+              -Dglx=disabled \
+              -Dgbm=disabled \
+              -Degl=disabled \
+              -Dopengl=false \
+              -Dgles1=disabled \
+              -Dgles2=disabled \
+              -Dglvnd=disabled \
+              -Dvalgrind=disabled \
+              -Dgallium-drivers= \
+              -Dshared-glapi=disabled \
+              -Dzstd=disabled \
+              -Dmesa-clc=system \
+              -Dprecomp-compiler=system \
+              -Dvulkan-drivers=panfrost \
+              -Dllvm=disabled
+
+      - name: Compile Project
+        run: |
+          meson compile -C build
+
+      - name: Grant Execute Permissions to Package Script
+        run: chmod +x ci-scripts/*.sh
 
       - name: Structure and Pack Final Container Package
         run: ./ci-scripts/package_wrapper.sh
