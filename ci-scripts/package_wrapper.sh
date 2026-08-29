@@ -4,25 +4,29 @@ set -e
 BUILD_DIR="build"
 rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
 
-echo "-> Cambiando permisos globales del directorio build para permitir el rescate..."
+echo "-> Liberando los permisos del volumen de Docker..."
 sudo chmod -R 777 "$BUILD_DIR" 2>/dev/null || true
 
-echo "-> Buscando de forma ultra-agresiva la librería binaria generada..."
-# 🟢 BÚSQUEDA ABSOLUTA: Escanea extensiones parciales y comodines en cualquier subcarpeta
-TARGET_SO=$(find "$BUILD_DIR" -type f -name "libvulkan_*.so*" | head -n 1)
+echo "-> Buscando el binario original libvulkan_panfrost.so generado por Docker..."
+# Capturamos el archivo físico original de Mesa Panfrost
+TARGET_SO=$(find "$BUILD_DIR" -type f -name "libvulkan_panfrost.so" | head -n 1)
 
 if [ -n "$TARGET_SO" ] && [ -f "$TARGET_SO" ]; then
-  echo "-> ¡ÉXITO TOTAL! Librería localizada físicamente en: $TARGET_SO"
-  echo "-> Extrayendo y renombrando para el ecosistema Winlator..."
+  echo "-> ¡Librería original localizada con éxito en: $TARGET_SO!"
+  echo "-> Realizando mutación externa a libvulkan_wrapper.so..."
+  # Lo copiamos a la estructura final cambiando el nombre al formato wrapper
   cp -v "$TARGET_SO" pkg/usr/lib/libvulkan_wrapper.so
   
-  echo "-> Inyectando SONAME interno prioritario mediante patchelf..."
+  echo "-> Modificando la cabecera SONAME interna mediante patchelf para Winlator..."
+  # 🟢 ESTE ES EL TRUCO: Cambiamos la identidad interna del binario para que no se rompa al cargar
   patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
+  
+  echo "-> Limpiando símbolos de depuración redundantes..."
   strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
 else
-  echo "🚨 ERROR CRÍTICO: No se localizó ningún binario Vulkan parcial en '$BUILD_DIR'."
-  echo "-> Listando contenido de la carpeta de salida para diagnóstico de emergencia:"
-  ls -R "$BUILD_DIR/src/panfrost/" 2>/dev/null || ls -R "$BUILD_DIR" | head -n 30
+  echo "🚨 ERROR CRÍTICO: No se encontró el binario 'libvulkan_panfrost.so' en el directorio de construcción."
+  echo "-> Estructura actual de la carpeta para diagnóstico:"
+  ls -R "$BUILD_DIR" | head -n 40
   exit 1
 fi
 
@@ -35,4 +39,4 @@ chmod -R 755 pkg/ && chmod 644 pkg/usr/lib/libvulkan_wrapper.so pkg/usr/share/vu
 
 echo "-> Comprimiendo el contenedor final en wrapper.tzst..."
 tar -I 'zstd -19 -T0' -cf wrapper.tzst -C pkg usr
-echo "-> ¡PROCESO COMPLETADO CON ÉXITO ABSOLUTO!"
+echo "-> ¡MUTACIÓN Y EMPAQUETADO COMPLETADOS CON ÉXITO TOTAL!"
