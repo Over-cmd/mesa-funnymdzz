@@ -6,12 +6,12 @@ sudo apt-get update
 sudo apt-get install -y zstd patchelf
 
 echo "-> Estructurando el arbol de dependencias logicas locales..."
-mkdir -p shutils/system shutils/lib shutils/log shutils/hardware shutils/sync
+mkdir -p shutils/system shutils/lib shutils/log shutils/hardware shutils/sync shutils/android
 
 echo "-> Copiando las carpetas de cabeceras de cutils..."
 if [ -d "tmp_libcutils/include/cutils" ]; then
   cp -r tmp_libcutils/include/cutils shutils/
-elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
+  elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
   cp -r tmp_libcutils/include_vndk/cutils shutils/
 fi
 
@@ -66,6 +66,16 @@ cat << 'EOF' > shutils/system/graphics.h
 #ifndef SYSTEM_GRAPHICS_H_
 #define SYSTEM_GRAPHICS_H_
 #include <stdint.h>
+#endif
+EOF
+
+# Inyección de nativewindow
+cat << 'EOF' > shutils/android/native_window.h
+#ifndef ANDROID_NATIVE_WINDOW_H
+#define ANDROID_NATIVE_WINDOW_H
+#include <stdint.h>
+typedef struct ANativeWindow ANativeWindow;
+typedef struct ANativeWindowBuffer ANativeWindowBuffer;
 #endif
 EOF
 
@@ -143,6 +153,14 @@ Description: Android sync fences library for Mesa compilation
 Version: 1.0.0
 Cflags: -I/workspace/shutils
 Libs: -L/workspace/shutils/lib -lsync
+EOF
+
+cat << 'EOF' > shutils/nativewindow.pc
+Name: nativewindow
+Description: Android nativewindow stub for Mesa compilation
+Version: 1.0.0
+Cflags: -I/workspace/shutils
+Libs: 
 EOF
 
 echo "-> Verificando entorno unificado completo de Shims de Android:"
