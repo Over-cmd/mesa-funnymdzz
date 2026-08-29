@@ -23,7 +23,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zstd patchelf
 
-      # Clonación interna segura de libcutils original
       - name: Checkout Standalone libcutils Repo
         uses: actions/checkout@v4
         with:
@@ -31,7 +30,6 @@ jobs:
           ref: 'master'
           path: 'tmp_libcutils'
 
-      # 🟢 TU NUEVO HALLAZGO: Clonación impecable y segura del HAL original de LineageOS
       - name: Checkout LineageOS libhardware Repo
         uses: actions/checkout@v4
         with:
@@ -39,24 +37,23 @@ jobs:
           ref: 'lineage-23.2'
           path: 'tmp_libhardware'
 
-      # Ensamblamos y compilamos las dos instalaciones originales de Android de forma local
       - name: Compile and Install Original Android Cutils & Hardware
         run: |
           echo "-> Estructurando el arbol de dependencias logicas locales..."
-          mkdir -p shutils/system shutils/lib shutils/hardware shutils/log
+          mkdir -p shutils/system shutils/lib shutils/log
           
-          echo "-> Copiando las cabeceras nativas de cutils..."
+          echo "-> Copiando las carpetas de cabeceras manteniendo su estructura..."
           if [ -d "tmp_libcutils/include/cutils" ]; then
             cp -r tmp_libcutils/include/cutils shutils/
           elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
             cp -r tmp_libcutils/include_vndk/cutils shutils/
           fi
           
-          echo "-> Copiando las cabeceras nativas de LineageOS HAL..."
+          # 🟢 CORRECCIÓN: Copiamos la estructura completa del directorio para resolver <hardware/hardware.h>
+          mkdir -p shutils/hardware
           cp -r tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
           cp -r tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
           
-          # Inyección de las macros de registro que exige hardware.c
           cat << 'EOF' > shutils/log/log.h
           #ifndef ANDROID_LOG_H
           #define ANDROID_LOG_H
@@ -69,7 +66,6 @@ jobs:
           #endif
           EOF
 
-          # Generamos una cabecera de compatibilidad para evitar bloqueos del cargador cruzado
           cat << 'EOF' > shutils/system/graphics.h
           #ifndef SYSTEM_GRAPHICS_H_
           #define SYSTEM_GRAPHICS_H_
@@ -85,7 +81,6 @@ jobs:
           gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils
           ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
 
-          echo "-> Generando archivo de configuracion pkg-config oficial para cutils..."
           cat << 'EOF' > shutils/cutils.pc
           Name: cutils
           Description: Standalone Android cutils library for Mesa
@@ -94,7 +89,6 @@ jobs:
           Libs: -L/workspace/shutils/lib -lcutils
           EOF
           
-          echo "-> Generando archivo de configuracion pkg-config oficial para hardware..."
           cat << 'EOF' > shutils/hardware.pc
           Name: hardware
           Description: LineageOS Android hardware HAL library for Mesa
@@ -103,7 +97,7 @@ jobs:
           Libs: -L/workspace/shutils/lib -lhardware
           EOF
 
-          echo "-> Verificando entorno original unificado de LineageOS Shims:"
+          echo "-> Verificando entorno unificado de LineageOS Shims:"
           ls -R shutils/
           rm -rf tmp_libcutils tmp_libhardware
 
@@ -118,7 +112,6 @@ jobs:
             sed -i 's/return vk_error(instance, VK_ERROR_INCOMPATIBLE_DRIVER);/return VK_SUCCESS;/g' "$PANVK_DEVICE" 2>/dev/null || true
           fi
 
-      # COMPILACIÓN MAESTRA DOCKER: Pasamos las dependencias oficiales de LineageOS mediante PKG_CONFIG_PATH
       - name: Run Wrapper Compiler via Guided Docker Container
         run: |
           echo "-> Compilando wrapper de forma nativa usando la infraestructura interna de Docker..."
@@ -130,7 +123,6 @@ jobs:
             chmod -R 777 ${{ env.BUILD_DIR }}
           "
 
-      # REESTRUCTURACIÓN COMPATIBLE: Empaquetamos el binario nativo 'wrapper' directo para el instalador
       - name: Structure and Pack wrapper.tzst
         run: |
           rm -rf pkg && mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
