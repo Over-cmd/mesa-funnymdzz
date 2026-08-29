@@ -11,7 +11,7 @@ mkdir -p shutils/system shutils/lib shutils/log shutils/hardware shutils/sync sh
 echo "-> Copiando las carpetas de cabeceras de cutils..."
 if [ -d "tmp_libcutils/include/cutils" ]; then
   cp -r tmp_libcutils/include/cutils shutils/
-  elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
+elif [ -d "tmp_libcutils/include_vndk/cutils" ]; then
   cp -r tmp_libcutils/include_vndk/cutils shutils/
 fi
 
@@ -19,7 +19,7 @@ echo "-> Copiando cabeceras HAL de LineageOS al entorno global de Shims..."
 cp -rf tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
 cp -rf tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
 
-# Inyección de las macros de registro
+# Inyección de las macros de registro de Android
 cat << 'EOF' > shutils/log/log.h
 #ifndef ANDROID_LOG_H
 #define ANDROID_LOG_H
@@ -47,7 +47,7 @@ void __android_log_assert(const char* cond, const char* tag, const char* fmt, ..
 #endif
 EOF
 
-# Inyección de las firmas de sincronización
+# Inyección de las firmas de sincronización de Android
 cat << 'EOF' > shutils/sync/sync.h
 #ifndef ANDROID_SYNC_H
 #define ANDROID_SYNC_H
@@ -69,7 +69,7 @@ cat << 'EOF' > shutils/system/graphics.h
 #endif
 EOF
 
-# Inyección de nativewindow
+# Inyección de la estructura original nativewindow exigida por la línea 1068
 cat << 'EOF' > shutils/android/native_window.h
 #ifndef ANDROID_NATIVE_WINDOW_H
 #define ANDROID_NATIVE_WINDOW_H
@@ -122,7 +122,7 @@ EOF
 gcc -c -fPIC shutils/stub_sync.c -o shutils/stub_sync.o -Ishutils
 ar rcs shutils/lib/libsync.a shutils/stub_sync.o
 
-# Generamos manifiestos de pkg-config
+# Generamos manifiestos pkg-config oficiales
 cat << 'EOF' > shutils/cutils.pc
 Name: cutils
 Description: Standalone Android cutils library for Mesa
@@ -158,6 +158,14 @@ EOF
 cat << 'EOF' > shutils/nativewindow.pc
 Name: nativewindow
 Description: Android nativewindow stub for Mesa compilation
+Version: 1.0.0
+Cflags: -I/workspace/shutils
+Libs: 
+EOF
+
+cat << 'EOF' > shutils/gralloctypes.pc
+Name: gralloctypes
+Description: Android gralloctypes stub for Mesa compilation
 Version: 1.0.0
 Cflags: -I/workspace/shutils
 Libs: 
