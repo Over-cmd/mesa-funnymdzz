@@ -39,13 +39,13 @@ jobs:
               libdrm-dev \
               pkg-config \
               gettext \
-              llvm-dev \
-              libclang-dev \
-              libclc-dev
+              llvm-18-dev \
+              libclang-18-dev \
+              libclc-18-dev
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-          # 🟢 INYECCIÓN DEL SHIM LIBCLC EN EL HOST: Satisface el validador raíz sin archivos fantasmas
+          # Registro del manifiesto local para que el validador del host no proteste
           sudo mkdir -p /usr/lib/pkgconfig
           sudo cat << 'EOF' | sudo tee /usr/lib/pkgconfig/libclc.pc
           Name: libclc
@@ -55,7 +55,7 @@ jobs:
           Libs: 
           EOF
 
-      # GENERACIÓN DE EMULADORES DE HOST: Ahora leerá el libclc.pc inyectado y pasará limpio
+      # GENERACIÓN DE HERRAMIENTAS DE HOST: Compilación reglamentaria en x86_64
       - name: Generate Host Tools
         run: |
           meson setup build-host \
@@ -70,13 +70,12 @@ jobs:
 
           ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2
 
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-cl-dummy"
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
           ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
 
-      # CONFIGURACIÓN DEL CROSS-FILE NATIVO DEL NDK DE GOOGLE
+      # CONFIGURACIÓN DEL ENTORNO DE COMPILACIÓN CRUZADA (ANDROID AARCH64)
       - name: Configure Cross-File Matrix
         run: |
           cat << 'EOF' > android-cross.txt
@@ -98,7 +97,7 @@ jobs:
           EOF
           envsubst < android-cross.txt > android-cross-compiled.txt
 
-      # CONFIGURACIÓN DE MESON PURA DE VULKAN PANVK (La compilación cruzada hereda el bypass limpio)
+      # FASE CENTRAL DE CONFIGURACIÓN DEL DRIVER VULKAN PANVK PURIFICADO
       - name: Configure Meson
         run: |
           meson setup build \
@@ -122,8 +121,10 @@ jobs:
               -Dmesa-clc=system \
               -Dprecomp-compiler=system \
               -Dvulkan-drivers=panfrost \
-              -Dllvm=disabled
+              -Dllvm=disabled \
+              -Dpanfrost-kmds=kbase,panthor
 
+      # COMPILACIÓN DEL BINARIO GRÁFICO FINAL
       - name: Compile Project
         run: |
           meson compile -C build
@@ -131,6 +132,7 @@ jobs:
       - name: Grant Execute Permissions to Package Script
         run: chmod +x ci-scripts/*.sh
 
+      # RESCATE Y MUTACIÓN EXTERNA COMPATIBLE CON WINLATOR
       - name: Structure and Pack Final Container Package
         run: ./ci-scripts/package_wrapper.sh
 
