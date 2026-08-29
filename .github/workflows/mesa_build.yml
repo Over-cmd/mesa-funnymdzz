@@ -1,4 +1,4 @@
-name: Android NDK Build (PanVK Native via Repo Shims)
+name: Android NDK Build (PanVK Native via Local Scripts)
 
 on:
   push:
@@ -17,10 +17,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Patch anon_file.c for memfd_create
-        run: |
-          sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,64 +38,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-      # CONFIGURACIÓN DEL CROSS-FILE NATIVO DEL NDK DE GOOGLE
-      - name: Configure Cross-File Matrix
+      # 🟢 PASO MAESTRO: Concedemos permisos totales de ejecución a toda tu artillería de scripts locales
+      - name: Grant Execute Permissions to Local Scripts
         run: |
-          cat << 'EOF' > android-cross.txt
-          [binaries]
-          c = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang'
-          cpp = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++'
-          ar = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          strip = '$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config = '/usr/bin/pkg-config'
+          chmod +x setup.sh compile.sh log.sh push.sh 2>/dev/null || true
+          chmod +x ci-scripts/*.sh 2>/dev/null || true
 
-          [properties]
-          needs_exe_wrapper = true
-
-          [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'aarch64'
-          endian = 'little'
-          EOF
-          envsubst < android-cross.txt > android-cross-compiled.txt
-
-      # FASE MAESTRA DE CONFIGURACIÓN: Enlazamos obligatoriamente tu carpeta shims nativa del repositorio
-      - name: Configure Meson
+      # 🟢 CONFIGURACIÓN NATIVA: Ejecutamos tu setup.sh oficial usando tu android.toml del repositorio
+      - name: Run Native Setup Script
         env:
-          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
-          meson setup build \
-              --cross-file android-cross-compiled.txt \
-              -Dbuildtype=${{ matrix.build-type }} \
-              -Dplatforms=android \
-              -Dandroid-stub=true \
-              -Dandroid-libbacktrace=disabled \
-              -Dplatform-sdk-version=30 \
-              -Dglx=disabled \
-              -Dgbm=disabled \
-              -Degl=disabled \
-              -Dopengl=false \
-              -Dgles1=disabled \
-              -Dgles2=disabled \
-              -Dglvnd=disabled \
-              -Dvalgrind=disabled \
-              -Dgallium-drivers= \
-              -Dshared-glapi=disabled \
-              -Dzstd=disabled \
-              -Dvulkan-drivers=panfrost \
-              -Dllvm=disabled \
-              -Dpanfrost-kmds=kbase,panthor
+          ./setup.sh
 
-      # COMPILACIÓN DEL BINARIO GRÁFICO FINAL PANVK
-      - name: Compile Project
+      # 🟢 COMPILACIÓN NATIVA: Tu script compile.sh se encarga de compilar y aplicar los empaquetados
+      - name: Compile Project via Local Engine
         run: |
-          meson compile -C build
+          ./compile.sh
 
-      - name: Grant Execute Permissions to Package Script
-        run: chmod +x ci-scripts/*.sh
-
-      # RESCATE Y MUTACIÓN EXTERNA COMPATIBLE CON WINLATOR
+      # RESCATE Y CONVERSIÓN COMPATIBLE CON WINLATOR
       - name: Structure and Pack Final Container Package
         run: ./ci-scripts/package_wrapper.sh
 
