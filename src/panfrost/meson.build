@@ -17,15 +17,11 @@ if with_panfrost_rust
     '-Aclippy::identity_op',
     '-Aclippy::len_zero',
     '-Aclippy::manual_range_contains',
-    # normally this is a good one, but we use it where the "better" code is
-    # worse
     '-Aclippy::needless_range_loop',
     '-Aclippy::redundant_field_names',
     '-Aclippy::upper_case_acronyms',
     '-Aclippy::vec_box',
     '-Aclippy::write_with_newline',
-    # warns about public function might dereference a raw pointer, but nothing
-    # is actually public here
     '-Aclippy::not_unsafe_ptr_arg_deref',
     '-Anon_snake_case',
   ]
@@ -34,18 +30,18 @@ endif
 subdir('shared')
 subdir('model')
 
-if with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
+if true # with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
    subdir('genxml')
    subdir('lib')
 endif
 
 subdir('compiler')
 
-if with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
+if true # with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
   subdir('clc')
 endif
 
-if with_gallium_panfrost or with_panfrost_vk
+if true # with_gallium_panfrost or with_panfrost_vk
    subdir('libpan')
    subdir('perf')
 endif
@@ -74,7 +70,7 @@ bifrost_compiler = executable(
   build_by_default : with_tools.contains('panfrost')
 )
 
-if with_panfrost_vk
+if true # with_panfrost_vk
   subdir('vulkan')
 endif
 
