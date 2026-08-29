@@ -78,9 +78,13 @@ jobs:
           g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
+          # 🟢 CORRECCIÓN HISTÓRICA: Inyectamos stdbool.h al principio de hardware.c para activar soporte booleano nativo
+          echo "-> Inyectando soporte booleano stdbool.h en hardware.c..."
+          sed -i '1s/^/#include <stdbool.h>\n/' tmp_libhardware/hardware.c
+          
           echo "-> Compilando hardware.c nativo de LineageOS..."
-          # 🟢 CORRECCIÓN: Agregamos -Itmp_libhardware/include para resolver de manera nativa la firma interna de LineageOS
-          gcc -c -fPIC tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Itmp_libhardware/include -I.
+          # 🟢 CORRECCIÓN: Agregamos -std=c19 para que gcc asimile la sintaxis moderna de LineageOS sin fallos
+          gcc -c -fPIC -std=c19 tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Itmp_libhardware/include -I.
           ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
 
           cat << 'EOF' > shutils/cutils.pc
