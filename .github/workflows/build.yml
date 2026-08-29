@@ -1,4 +1,4 @@
-name: Android NDK Build (PanVK Native)
+name: Android NDK Build (PanVK Native via Repo Shims)
 
 on:
   push:
@@ -38,61 +38,24 @@ jobs:
               flex \
               libdrm-dev \
               pkg-config \
-              gettext \
-              llvm-18-dev \
-              libclang-18-dev \
-              libclc-18-dev
+              gettext
           python -m pip install --upgrade pip
           pip install mako PyYAML meson ninja packaging
 
-          # CREACIÓN DE SHIMS LOCALES PARA EL ENTORNO DEL HOST
-          mkdir -p ${{ github.workspace }}/host-shims
-
-          # 🟢 CORRECCIÓN CENTRAL: Se inyecta 'includedir' exigido por el compilador clc en la línea 44
-          cat << 'EOF' > ${{ github.workspace }}/host-shims/libclc.pc
+          # 🟢 INYECCIÓN MAESTRA DEL MANIFIESTO: Satisface la línea 44 de src/compiler/clc/meson.build
+          sudo mkdir -p /usr/share/pkgconfig
+          sudo cat << 'EOF' | sudo tee /usr/share/pkgconfig/libclc.pc
           prefix=/usr
           includedir=${prefix}/include
 
           Name: libclc
-          Description: Standalone libclc stub for Mesa host tools compilation
+          Description: Standalone libclc stub for Mesa compilation
           Version: 1.0.0
           Cflags: -I${includedir}
           Libs: 
           EOF
 
-          # Generación del Shim LLVMSPIRVLib local
-          cat << 'EOF' > ${{ github.workspace }}/host-shims/LLVMSPIRVLib.pc
-          Name: LLVMSPIRVLib
-          Description: Standalone LLVMSPIRVLib stub for Mesa host tools compilation
-          Version: 18.1.0
-          Cflags: -I/usr/include
-          Libs: 
-          EOF
-
-      # GENERACIÓN DE HERRAMIENTAS DE HOST
-      - name: Generate Host Tools
-        run: |
-          export PKG_CONFIG_PATH=${{ github.workspace }}/host-shims:$PKG_CONFIG_PATH
-          meson setup build-host \
-              -Dplatforms=[] \
-              -Dgallium-drivers=[] \
-              -Dvulkan-drivers=[] \
-              -Dtools=panfrost \
-              -Dprecomp-compiler=enabled \
-              -Dinstall-precomp-compiler=true \
-              -Dllvm=enabled \
-              -Dmesa-clc=enabled -Dinstall-mesa-clc=true
-
-          ninja -C build-host src/compiler/clc/mesa_cl_dummy 2>/dev/null || true
-          ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2
-
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_cl_dummy" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-cl-dummy" 2>/dev/null || true
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa_clc" "$GITHUB_WORKSPACE/build-host/src/compiler/clc/mesa-clc"
-          ln -sf "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn_bindgen2" "$GITHUB_WORKSPACE/build-host/src/compiler/spirv/vtn-bindgen2"
-          echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
-          echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
-
-      # CONFIGURACIÓN DEL ENTORNO DE COMPILACIÓN CRUZADA (ANDROID AARCH64)
+      # CONFIGURACIÓN DEL CROSS-FILE NATIVO DEL NDK DE GOOGLE
       - name: Configure Cross-File Matrix
         run: |
           cat << 'EOF' > android-cross.txt
@@ -114,8 +77,10 @@ jobs:
           EOF
           envsubst < android-cross.txt > android-cross-compiled.txt
 
-      # FASE CENTRAL DE CONFIGURACIÓN DEL DRIVER VULKAN PANVK PURIFICADO
+      # FASE MAESTRA DE CONFIGURACIÓN: Enlazamos tu carpeta shims nativa del repositorio
       - name: Configure Meson
+        env:
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
         run: |
           meson setup build \
               --cross-file android-cross-compiled.txt \
@@ -135,13 +100,11 @@ jobs:
               -Dgallium-drivers= \
               -Dshared-glapi=disabled \
               -Dzstd=disabled \
-              -Dmesa-clc=system \
-              -Dprecomp-compiler=system \
               -Dvulkan-drivers=panfrost \
               -Dllvm=disabled \
               -Dpanfrost-kmds=kbase,panthor
 
-      # COMPILACIÓN DEL BINARIO GRÁFICO FINAL
+      # COMPILACIÓN DEL BINARIO GRÁFICO FINAL PANVK
       - name: Compile Project
         run: |
           meson compile -C build
