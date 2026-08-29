@@ -1,10 +1,12 @@
 name: Termux-Build of Mesa Vulkan Wrapper
+
 on:
   push:
-  pull_request:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   build-aarch64-wrapper:
     runs-on: ubuntu-latest
@@ -53,7 +55,6 @@ jobs:
           cp -rf tmp_libhardware/include/hardware/* shutils/hardware/ 2>/dev/null || true
           cp -rf tmp_libhardware/include_all/hardware/* shutils/hardware/ 2>/dev/null || true
           
-          # Inyectamos el log de control local
           cat << 'EOF' > shutils/log/log.h
           #ifndef ANDROID_LOG_H
           #define ANDROID_LOG_H
@@ -66,7 +67,6 @@ jobs:
           #endif
           EOF
 
-          # Generamos una cabecera de compatibilidad para evitar bloqueos del cargador cruzado
           cat << 'EOF' > shutils/system/graphics.h
           #ifndef SYSTEM_GRAPHICS_H_
           #define SYSTEM_GRAPHICS_H_
@@ -78,12 +78,26 @@ jobs:
           g++ -c -fPIC tmp_libcutils/native_handle.cpp -o tmp_libcutils/native_handle.o -Ishutils
           ar rcs shutils/lib/libcutils.a tmp_libcutils/native_handle.o
           
-          echo "-> Inyectando soporte booleano stdbool.h en hardware.c..."
-          sed -i '1s/^/#include <stdbool.h>\n/' tmp_libhardware/hardware.c
+          # 🟢 CORRECCIÓN INDESTRUCTIBLE: Forzamos la definición absoluta de PATH_MAX y las funciones stdlib de Linux
+          echo "-> Creando cabecera de inyeccion forzada para hardware.c..."
+          cat << 'EOF' > shutils/force_includes.h
+          #ifndef FORCE_INCLUDES_H
+          #define FORCE_INCLUDES_H
+          #define _GNU_SOURCE
+          #include <stdbool.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <unistd.h>
+          #include <limits.h>
+          #ifndef PATH_MAX
+          #define PATH_MAX 4096
+          #endif
+          #endif
+          EOF
           
-          echo "-> Compilando hardware.c nativo de LineageOS..."
-          # 🟢 CORRECCIÓN: Se cambió '-std=c19' por el estándar compatible '-std=c11' sugerido por gcc
-          gcc -c -fPIC -std=c11 tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Itmp_libhardware/include -I.
+          echo "-> Compilando hardware.c nativo de LineageOS con auto-inclusion..."
+          # Usamos -include shutils/force_includes.h para soldar la configuracion en el compilador sin alterar el .c original
+          gcc -c -fPIC -std=c11 -include shutils/force_includes.h tmp_libhardware/hardware.c -o tmp_libhardware/hardware.o -Ishutils -Itmp_libhardware/include -I.
           ar rcs shutils/lib/libhardware.a tmp_libhardware/hardware.o
 
           cat << 'EOF' > shutils/cutils.pc
@@ -106,7 +120,6 @@ jobs:
           ls -R shutils/
           rm -rf tmp_libcutils tmp_libhardware
 
-      # DESBLOQUEO DE INSTANCIA EN C: Forzamos éxito en vkCreateInstance en tu Mali-G52
       - name: Patch PanVK vkCreateInstance for Forced Initialization
         run: |
           PANVK_DEVICE=$(find src/ -name "*device.c" | head -n 1)
