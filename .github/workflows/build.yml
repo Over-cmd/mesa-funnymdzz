@@ -48,7 +48,8 @@ jobs:
             flex \
             libdrm-dev \
             pkg-config \
-            gettext
+            gettext \
+            patchelf
 
           python -m pip install --upgrade pip
           pip install mako PyYAML 'meson>=1.4.0' ninja packaging
@@ -77,13 +78,31 @@ jobs:
           echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
 
+      - name: Auto-Detect True Android NDK Path
+        id: ndk-detector
+        run: |
+          echo "-> Escaneando el sistema en busca de carpetas NDK validas..."
+          TRUE_NDK=""
+          for path in /usr/local/lib/android/sdk/ndk/* /home/runner/Android/Sdk/ndk/*; do
+            if [ -d "$path/toolchains/llvm/prebuilt/linux-x86_64/bin" ]; then
+              TRUE_NDK="$path"
+              break
+            fi
+          done
+          if [ -z "$TRUE_NDK" ]; then
+            echo "🚨 ERROR CRITICO: No se encontro ningun NDK real con binarios de 64 bits!" && exit 1
+          fi
+          echo "-> NDK Real Detectado y validado en: $TRUE_NDK"
+          echo "REAL_NDK_HOME=$TRUE_NDK" >> $GITHUB_ENV
+
       - name: Configure Cross-Compilation (Meson NDK)
         env:
           PKG_CONFIG_LIBDIR: ${{ github.workspace }}/shims
         run: |
-          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          export ANDROID_NDK_HOME="${{ env.REAL_NDK_HOME }}"
           export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
           
+          echo "-> ANDROID_NDK_HOME forzado en: $ANDROID_NDK_HOME"
           echo "-> Generando archivo de configuración cruzada android-cross.txt..."
           if [ -f "android.toml" ]; then
             envsubst < android.toml > android-cross.txt
@@ -120,59 +139,66 @@ jobs:
           echo "-> Ejecutando compilación cruzada hacia Android ARM64..."
           meson compile -C build
 
+      # 🟢 EMPAQUETADO FIEL: Forzamos la estructura exacta que exige el instalador de Bannerlator
       - name: Structure and Pack wrapper.tzst for Bannerlator
         run: |
           echo "-> Creando estructura limpia para el cargador de Android..."
           rm -rf pkg
-          mkdir -p pkg/usr/lib
-          mkdir -p pkg/usr/share/vulkan/icd.d
+          mkdir -p pkg/usr/lib pkg/usr/share/vulkan/icd.d pkg/usr/share/vulkan/settings.d
           
-          echo "-> Extrayendo binario libvulkan_panfrost.so de la compilación del NDK..."
+          echo "-> Extrayendo y renombrando binario original a libvulkan_wrapper.so..."
           if [ -f "build/src/panfrost/vulkan/libvulkan_panfrost.so" ]; then
-            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_panfrost_kbase.so
+            cp -v "build/src/panfrost/vulkan/libvulkan_panfrost.so" pkg/usr/lib/libvulkan_wrapper.so
+            
+            echo "-> Reescribiendo el SONAME interno para evitar rechazos en Android..."
+            patchelf --set-soname libvulkan_wrapper.so pkg/usr/lib/libvulkan_wrapper.so
+            strip --strip-unneeded pkg/usr/lib/libvulkan_wrapper.so
           else
             echo "ERROR: ¡El NDK no generó el binario .so esperado!" && exit 1
           fi
 
-          echo "-> Creando manifiestos ICD JSON válidos (panfrost_kbase_icd)..."
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
+          echo "-> Creando manifiestos ICD JSON exigidos por el cargador..."
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
           {
               "ICD": {
                   "api_version": "1.4.352",
                   "library_arch": "64",
-                  "library_path": "libvulkan_panfrost_kbase.so"
+                  "library_path": "libvulkan_wrapper.so"
               },
               "file_format_version": "1.0.1"
           }
           EOF
 
-          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          cat << 'EOF' > pkg/usr/share/vulkan/icd.d/wrapper_icd.arm.json
           {
               "ICD": {
                   "api_version": "1.4.352",
                   "library_arch": "32",
-                  "library_path": "libvulkan_panfrost_kbase.so"
+                  "library_path": "libvulkan_wrapper.so"
               },
               "file_format_version": "1.0.1"
           }
           EOF
 
-          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-          sed -i 's/^[ \t]*//' pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          # Generamos el archivo de configuración ambiental requerido para desatar la aceleración de Bifrost
+          echo '{"env":{"PAN_I_WANT_A_BROKEN_VULKAN_DRIVER":"1","MESA_VK_IGNORE_CONFORMANCE_WARNING":"1","PANVK_DEBUG":"sync","MESA_VK_FORCE_BLIT":"1","MESA_LOADER_DRIVER_OVERRIDE":"panfrost","GALLIUM_DRIVER":"panfrost"}}' > pkg/usr/share/vulkan/settings.d/wrapper_settings.json
+
+          echo "msf:315508" > pkg/usr/version.txt
           
           echo "-> Ajustando permisos globales..."
-          chmod 755 pkg/usr pkg/usr/lib pkg/usr/share pkg/usr/share/vulkan pkg/usr/share/vulkan/icd.d
-          chmod 644 pkg/usr/lib/libvulkan_panfrost_kbase.so
-          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.aarch64.json
-          chmod 644 pkg/usr/share/vulkan/icd.d/panfrost_kbase_icd.arm.json
+          chmod -R 755 pkg/
+          chmod 644 pkg/usr/lib/libvulkan_wrapper.so 
+          chmod 644 pkg/usr/share/vulkan/icd.d/*.json 
+          chmod 644 pkg/usr/share/vulkan/settings.d/*.json 
+          chmod 644 pkg/usr/version.txt
 
-          echo "=== Árbol Estructural del Paquete NDK ==="
+          echo "=== Árbol Estructural del Paquete Final ==="
           ls -R pkg
           echo "========================================="
           
-          echo "-> Comprimiendo estructura dual en wrapper.tzst..."
+          echo "-> Comprimiendo estructura exacta en wrapper.tzst..."
           cd pkg
-          tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/
+          tar -I 'zstd -19 -T0' -cf ../wrapper.tzst usr/ version.txt
           cd ..
 
       - name: Upload Final wrapper.tzst for Bannerlator
