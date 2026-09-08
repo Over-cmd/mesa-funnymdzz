@@ -1,4 +1,4 @@
-name: Build PanVK Bifrost Vulkan 1.3 Unified Pack (ZIP Bannerlator)
+name: Build PanVK Bifrost Vulkan 1.3 Dual Pack (ZIP & TAR.ZST)
 
 on:
   push:
@@ -64,8 +64,10 @@ jobs:
         chmod +x build_mali.sh
         ./build_mali.sh
 
-    - name: 📤 6. Subir el Único ZIP Plano Saneado a los Artefactos de GitHub
+    - name: 📤 6. Capturar y Subir el Arsenal Gráfico Dual (ZIP + TAR.ZST)
       uses: actions/upload-artifact@v4
       with:
-        name: panvk-mali-bifrost-unified-zip
-        path: panvk-bannerlator-driver.zip
+        name: panvk-mali-bifrost-dual-pack
+        path: |
+          panvk-bannerlator-driver.zip
+          wrapper.tar.zst
