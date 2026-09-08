@@ -135,7 +135,17 @@ jobs:
       run: |
         meson compile -C build
 
-    - name: 📦 8. Ensamblar Ambas Estructuras de Salida (Raíz Plana & Raíz usr/)
+    - name: 🔍 8. 🟢 ESCÁNER FORENSE TOTAL DE ARCHIVOS ENCONTRADOS (.SO)
+      run: |
+        echo "========================================================"
+        echo "🕵️‍♂️ INICIANDO RASTREO ELÁSTICO DE TODOS LOS ARCHIVOS .SO"
+        echo "========================================================"
+        # Buscamos todos los archivos terminados en .so dentro de la carpeta build
+        # imprimiendo su ruta completa y su tamaño real para auditar a LeeGao
+        find build/ -name "*.so*" -type f -exec ls -lh {} \;
+        echo "========================================================"
+
+    - name: 📦 9. Ensamblar Ambas Estructuras de Salida (Raíz Plana & Raíz usr/)
       run: |
         # LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana)
         mkdir -p ./pack_flat
@@ -162,7 +172,7 @@ jobs:
         
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
-        find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
+        find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
         
         cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
         {
@@ -177,7 +187,7 @@ jobs:
         chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
         chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-    - name: 🛠️ 9. Forjar Ambos Empaquetados en Paralelo (ZIP Plano & TAR.ZST Nivel 19)
+    - name: 🛠️ 10. Forjar Ambos Empaquetados en Paralelo (ZIP Plano & TAR.ZST Nivel 19)
       run: |
         # 1. Forjamos el ZIP plano para Bannerlator
         cd pack_flat
@@ -189,7 +199,7 @@ jobs:
         tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
         cd ..
 
-    - name: 📤 10. Subir el Arsenal Gráfico Completo a los Artefactos de GitHub
+    - name: 📤 11. Subir el Arsenal Gráfico Completo a los Artefactos de GitHub
       uses: actions/upload-artifact@v4
       with:
         name: panvk-mali-bifrost-dual-pack
