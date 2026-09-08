@@ -36,7 +36,8 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Configuración maestra compartida de alto tonelaje (17.6 MiB reales)
+# Configuramos en modo debugoptimized y default_library=both para forzar que 
+# Meson compile adrenotools como un archivo .so compartido independiente real.
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -63,24 +64,35 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
-echo "🚀 3. COMPILANDO CONTROLADOR MONOLÍTICO DINÁMICO CON NINJA"
+echo "🚀 3. COMPILANDO CONTROLADOR Y SUBPROYECTOS CON NINJA"
 echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. ENSAMBLANDO AMBOS FORMATOS (ZIP PLANO & TAR.ZST USR)"
+echo "📦 4. RESCATE FORENSE DEL ARCHIVO .SO OCULTO DE ADRENOTOOLS"
 echo "========================================================="
-# 🟢 LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana)
+# Creamos las carpetas limpias de empaquetado
 mkdir -p ./pack_flat
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
-find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
-find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
+mkdir -p ./pack_usr/usr/lib
+mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 
+# 🟢 EL SECTOR DEL CAZADOR: Buscamos el archivo .so real que fabricó Ninja 
+# adentro de la carpeta oculta de subprojects y lo extraemos a la raiz plana.
+echo "-> Iniciando busqueda del eslabon perdido de adrenotools..."
+find build/subprojects/ -name "*adrenotools*.so*" -exec cp -fv {} ./pack_flat/libadrenotools.so \; -exec cp -fv {} ./pack_usr/usr/lib/libadrenotools.so \; || true
+
+# Copiamos tus binarios principales de Mesa
+cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
+cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
+find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
+find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
+
+# Creamos el manifiesto meta.json
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido con Instancias Dinamicas de Kbase",
+  "description": "Custom PanVK Hibrido con libadrenotools Real Inyectado",
   "author": "Mesa & Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -88,13 +100,6 @@ cat << 'EOF' > ./pack_flat/meta.json
   "libraryName": "libvulkan_wrapper.so"
 }
 EOF
-
-# 🟢 LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/ Estructurada)
-mkdir -p ./pack_usr/usr/lib
-mkdir -p ./pack_usr/usr/share/vulkan/icd.d
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
-find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
-find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
 
 cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 {
@@ -110,19 +115,18 @@ chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
 chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
 
 echo "========================================================="
-echo "🔍 AUDITORÍA DE VERIFICACIÓN DE MEGABYTES"
+echo "🔍 VERIFICACIÓN FINAL DEL CONTENIDO INTEGRAL PLANO"
 echo "========================================================="
-ls -lh ./pack_flat/libvulkan_wrapper.so
+ls -lh ./pack_flat
 echo "========================================================="
 
-# Forjamos el ZIP plano para Bannerlator
+# Forjado dual definitivo
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
 
-# Forjamos el TAR.ZST nivel 19 para Termux-X11
 cd pack_usr
 tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
 cd ..
 
-echo ">>> ARSENAL GRÁFICO DUAL EMPAQUETADO CON ÉXITO <<<"
+echo ">>> ARSENAL DUAL CON RESCATE DE ARCHIVOS COMPLETADO <<<"
