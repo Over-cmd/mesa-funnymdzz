@@ -38,8 +38,8 @@ envsubst < android.toml > android-cross.txt
 
 # 🟢 CONFIGURACIÓN MAESTRA DE INSTANCIAS COMPARTIDAS:
 # Cambiamos default_library=both y activamos shared-glapi=enabled.
-# Esto obliga al compilador a inyectar tu adrenotools de Over-cmd como una biblioteca compartida dinamica real,
-# incrustando tus instancias de elusion en la tabla de exportación ELF para que Android las ejecute en frio.
+# Esto obliga al compilador a inyectar tu adrenotools de Over-cmd como una biblioteca compartida dinámica real,
+# incrustando tus instancias de elusión en la tabla de exportación ELF para que Android las ejecute en frío.
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -63,7 +63,7 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dprecomp-compiler=system \
     -Dvulkan-drivers=panfrost \
     -Dllvm=disabled \
-    -Dpanfrost-kmds=kbase,panthor
+            -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
 echo "🚀 3. COMPILANDO CONTROLADOR MONOLÍTICO DINÁMICO CON NINJA"
