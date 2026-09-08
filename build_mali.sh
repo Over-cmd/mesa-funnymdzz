@@ -35,7 +35,7 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
-echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO Y MESON SETUP"
+echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
 export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -46,29 +46,32 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
+# 🟢 TU MATRIZ DE COMPILACIÓN PURIFICADA:
+# Hemos soldado tus flags exactas combinadas con el modo dual compartido de adrenotools
+# para apagar los subcomponentes innecesarios y concentrar el silicio en tu Mali G52.
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
     -Db_lto=false \
-    -Dplatforms=x11 \
-    -Dplatform-sdk-version=30 \
-    -Dglx=disabled \
+    -Dcpp_rtti=false \
     -Dgbm=disabled \
-    -Degl=disabled \
-    -Dopengl=true \
-    -Dgles1=disabled \
-    -Dgles2=disabled \
-    -Dglvnd=disabled \
-    -Dvalgrind=disabled \
+    -Dopengl=false \
+    -Dllvm=disabled \
+    -Dshared-llvm=disabled \
+    -Dplatforms=x11 \
+    -Degl-native-platform=x11 \
     -Dgallium-drivers=panfrost \
+    -Ddraw-use-llvm=false \
+    -Dxmlconfig=disabled \
+    -Dvulkan-drivers=panfrost \
+    -Degl=enabled \
+    -Dglx=disabled \
     -Dshared-glapi=enabled \
     -Dzstd=disabled \
     -Dgallium-rusticl=false \
     -Dmesa-clc=system \
     -Dprecomp-compiler=system \
-    -Dvulkan-drivers=panfrost \
-    -Dllvm=disabled \
     -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
@@ -95,7 +98,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido con Suite Completa Adrenotools",
+  "description": "Custom PanVK Hibrido Optimizado con tus Flags Exactas",
   "author": "Mesa & Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -125,4 +128,4 @@ cd pack_usr
 tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
 cd ..
 
-echo ">>> ARSENAL DUAL CON SUITE COMPLETA GENERADO CON ÉXITO <<<"
+echo ">>> ARSENAL DUAL OPTIMIZADO GENERADO CON ÉXITO <<<"
