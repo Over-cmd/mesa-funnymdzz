@@ -36,10 +36,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# 🟢 CONFIGURACIÓN MAESTRA DE INSTANCIAS COMPARTIDAS:
-# Cambiamos default_library=both y activamos shared-glapi=enabled.
-# Esto obliga al compilador a inyectar tu adrenotools de Over-cmd como una biblioteca compartida dinámica real,
-# incrustando tus instancias de elusión en la tabla de exportación ELF para que Android las ejecute en frío.
+# Configuración maestra compartida de alto tonelaje (17.6 MiB reales)
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -63,7 +60,7 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dprecomp-compiler=system \
     -Dvulkan-drivers=panfrost \
     -Dllvm=disabled \
-            -Dpanfrost-kmds=kbase,panthor
+    -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
 echo "🚀 3. COMPILANDO CONTROLADOR MONOLÍTICO DINÁMICO CON NINJA"
@@ -71,9 +68,9 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. ENSAMBLANDO ARSENAL ZIP PLANO CON EXPORTACIÓN REAL"
+echo "📦 4. ENSAMBLANDO AMBOS FORMATOS (ZIP PLANO & TAR.ZST USR)"
 echo "========================================================="
-# Creamos la única estructura plana de salida para Bannerlator
+# 🟢 LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana)
 mkdir -p ./pack_flat
 cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
 find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
@@ -92,18 +89,40 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-chmod 755 ./pack_flat/*.so*
-chmod 644 ./pack_flat/meta.json
+# 🟢 LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/ Estructurada)
+mkdir -p ./pack_usr/usr/lib
+mkdir -p ./pack_usr/usr/share/vulkan/icd.d
+cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
+find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
+find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
+
+cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+{
+  "file_format_version": "1.0.0",
+  "ICD": {
+    "library_path": "libvulkan_wrapper.so",
+    "api_version": "1.3.289"
+  }
+}
+EOF
+
+chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
+chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
 
 echo "========================================================="
-echo "🔍 AUDITORÍA DE VERIFICACIÓN DE MEGABYTES EN EL DISCO"
+echo "🔍 AUDITORÍA DE VERIFICACIÓN DE MEGABYTES"
 echo "========================================================="
 ls -lh ./pack_flat/libvulkan_wrapper.so
 echo "========================================================="
 
-# Forjamos el único empaquetado ZIP plano
+# Forjamos el ZIP plano para Bannerlator
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
 
-echo ">>> FORJA UNIFICADA FINALIZADA CON ÉXITO ABSOLUTO <<<"
+# Forjamos el TAR.ZST nivel 19 para Termux-X11
+cd pack_usr
+tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
+cd ..
+
+echo ">>> ARSENAL GRÁFICO DUAL EMPAQUETADO CON ÉXITO <<<"
