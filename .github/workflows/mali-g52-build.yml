@@ -17,15 +17,26 @@ jobs:
     - name: 📥 1. Clonar tu propio Repositorio Fork Directo de Mesa
       uses: actions/checkout@v4
 
-    - name: 🧬 2. Aplicar Parche Inicial de Entorno Termux
+    - name: 🧬 2. Aplicar Inyección Biónica Directa en el Corazón de Vulkan (Bypass Real)
       run: |
-        # Parche directo exclusivo para memfd_create en entornos Termux
+        # Parche 1: anon_file.c para memfd_create en entornos Termux sin alterar el codigo
         sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
         
-        # Bypass auxiliar de pruebas complementarias de Gallium para evitar paros sintácticos
+        # Parche 2: BYPASS DE PRUEBAS DE GALLIUM (Neutralización del script de pruebas u_tests.c)
         mkdir -p src/gallium/auxiliary/util
         echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
-        echo "-> Entorno base de fuentes de tu Fork verificado."
+        
+        # Parche 3: 🟢 LA ESTOCADA DEL INGENIERO: Inyectamos el constructor biónico de entorno
+        # directamente al inicio del archivo real src/panfrost/vulkan/panvk_device.c.
+        # Esto clava las tres variables lógicas y el bypass de Kbase adentro del propio cuerpo de Vulkan,
+        # obligando a Android a despertar el silicio en el microsegundo cero sin depender de subproyectos externos.
+        sed -i '20i #include <stdlib.h>' src/panfrost/vulkan/panvk_device.c
+        sed -i '21i __attribute__((constructor)) void panvk_mali_bionic_init() {' src/panfrost/vulkan/panvk_device.c
+        sed -i '22i     setenv("PAN_MESA_DEBUG", "kbase", 1);' src/panfrost/vulkan/panvk_device.c
+        sed -i '23i     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);' src/panfrost/vulkan/panvk_device.c
+        sed -i '24i     setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);' src/panfrost/vulkan/panvk_device.c
+        sed -i '25i }' src/panfrost/vulkan/panvk_device.c
+        echo "-> Bypass molecular grabado a fuego en las entrañas de Vulkan (PanVK)."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
@@ -93,7 +104,7 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Forzar Acoplamiento de Envoltura Local y Configurar Meson Cruzado Saneado
+    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado Saneado Puro
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
@@ -108,10 +119,7 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
-        # 🟢 LA BANDERA DE OBLIGACIÓN: Cambiamos '--wrap-mode' a 'forcefallback' de forma estricta.
-        # Al ver tu archivo 'adrenotools.wrap' local en la carpeta subprojects, Meson detendrá cualquier
-        # descarga generica e inyectara stasticamente tus fuentes de Over-cmd adentro del driver de Vulkan.
-        meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
+        meson setup build --cross-file android-cross.txt \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
             -Dplatforms=x11 \
@@ -143,7 +151,7 @@ jobs:
         # LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana Inmune)
         mkdir -p ./pack_flat
         
-        # Copiamos tu driver de 18MB que ahora lleva tus parches de C y tu adrenotools hibrido fusionados por dentro
+        # Copiamos tu driver de 18MB que ahora lleva el bypass biónico soldado en su propia piel de Vulkan
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
         find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
@@ -152,7 +160,7 @@ jobs:
         {
           "schemaVersion": 1,
           "name": "Mesa PanVK Driver for Mali G52",
-          "description": "Custom PanVK Hibrido con Adrenotools-Mali Over-cmd Bypass",
+          "description": "Custom PanVK Autoinyectable con Kbase Bypass",
           "author": "Mesa & Over-cmd Community",
           "packageVersion": "26.3",
           "vendor": "Mesa",
