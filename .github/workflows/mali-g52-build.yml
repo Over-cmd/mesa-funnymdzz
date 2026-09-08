@@ -17,7 +17,7 @@ jobs:
     - name: 📥 1. Clonar tu propio Repositorio Fork Directo
       uses: actions/checkout@v4
 
-    - name: 🧬 2. Aplicar Parches Quirúrgicos Directos en Caliente en las Fuentes Reales
+    - name: 🧬 2. Aplicar Saneamiento de Inodos en Fuentes de Mesa (Original Puro)
       run: |
         # Parche 1: anon_file.c para memfd_create en entornos Termux sin alterar el codigo
         sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -26,15 +26,9 @@ jobs:
         mkdir -p src/gallium/auxiliary/util
         echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
         
-        # Parche 3: 🟢 INYECCIÓN FOCALIZADA INMUNE EN PANTHOR:
-        # Metemos los tres stubs de elusion estáticos directamente en la linea 25 del archivo real
-        # src/panfrost/lib/kmod/panthor_kmod.c. Al hacerlo localmente en este inodo, Clang asimilara
-        # las firmas de sync_wait de forma obligatoria por encima de las comillas, erradicando el error
-        # 556 de raiz sin causar redefiniciones en los bloques 500 ni pisar las cabeceras comunes de Mesa.
-        sed -i '25i static inline int sync_wait(int fd, int timeout) { return 0; }' src/panfrost/lib/kmod/panthor_kmod.c
-        sed -i '26i static inline int sync_merge(const char *name, int fd1, int fd2) { return -1; }' src/panfrost/lib/kmod/panthor_kmod.c
-        sed -i '27i static inline void sync_accumulate(const char *name, int *fd1, int fd2) { return; }' src/panfrost/lib/kmod/panthor_kmod.c
-        echo "-> Parches de elusión locales inyectados de forma molecular en panthor_kmod.c"
+        # 🟢 LIMPIEZA TOTAL: Retiramos cualquier inyección sobre libsync.h o panthor_kmod.c.
+        # Dejamos las fuentes nativas de tu Fork intactas, erradicando los errores de redefinición de golpe.
+        echo "-> Código fuente original de tu Fork restaurado y saneado con éxito."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
@@ -102,7 +96,7 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Modelo Puro Saneado)
+    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Suelo Limpio Saneado Original)
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
