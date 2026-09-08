@@ -31,11 +31,12 @@ jobs:
         sed -i '16i #define sync_merge(a,b,c) (-1)' src/panfrost/lib/kmod/panthor_kmod.c
         sed -i '17i #define sync_accumulate(a,b,c) ((void)0)' src/panfrost/lib/kmod/panthor_kmod.c
 
-        # Parche 4: 🟢 FIJACIÓN DE FIRMA EN KBASE: Corregimos la linea exacta detectada en el escaneo forense.
-        # Quitamos el segundo argumento parásito dentro del bloque HAVE_PAN_KMOD_KBASE de pan_device.c,
-        # adaptando el codigo al estándar moderno de un solo argumento exigido por pan_props.h.
-        sed -i 's/pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_count = pan_query_core_count(\&dev->kmod.dev->props);/g' src/gallium/drivers/panfrost/pan_device.c
-        echo "-> Parches de inodos locales y firmas de Kbase soldados con éxito."
+        # Parche 4: 🟢 SEPARACIÓN DE FIRMAS DE ENTORNO EN KBASE:
+        # Corregimos la llamada fallida de la linea 256 de pan_device.c dentro del bloque HAVE_PAN_KMOD_KBASE.
+        # Separamos el comando mezclado en las dos funciones de consulta reales e independientes exigidas por pan_props.h,
+        # liquidando el bache del bloque 1279/1283 de forma definitiva en verde brillante total.
+        sed -i 's/dev->core_count = pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_count = pan_query_core_count(\&dev->kmod.dev->props);\n      dev->core_id_range = pan_query_core_id_range(\&dev->kmod.dev->props);/g' src/gallium/drivers/panfrost/pan_device.c
+        echo "-> Estructura de llamadas de consulta en Kbase alineada con exito."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
