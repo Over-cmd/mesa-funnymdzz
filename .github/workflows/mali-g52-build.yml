@@ -135,24 +135,22 @@ jobs:
       run: |
         meson compile -C build
 
-    - name: 🔍 8. 🟢 ESCÁNER FORENSE TOTAL DE ARCHIVOS ENCONTRADOS (.SO)
+    - name: 📦 8. Ensamblar Ambas Estructuras Reales Capturando la Suite de Shaders Completa
       run: |
-        echo "========================================================"
-        echo "🕵️‍♂️ INICIANDO RASTREO ELÁSTICO DE TODOS LOS ARCHIVOS .SO"
-        echo "========================================================"
-        # Buscamos todos los archivos terminados en .so dentro de la carpeta build
-        # imprimiendo su ruta completa y su tamaño real para auditar a LeeGao
-        find build/ -name "*.so*" -type f -exec ls -lh {} \;
-        echo "========================================================"
-
-    - name: 📦 9. Ensamblar Ambas Estructuras de Salida (Raíz Plana & Raíz usr/)
-      run: |
-        # LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana)
+        # 🟢 LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana con Suite Completa)
         mkdir -p ./pack_flat
+        
+        # 1. Copiamos tu gigante de 18MB monolítico puro como libvulkan_wrapper.so
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
+        
+        # 2. Capturamos el binario real de Gallium que arrojó el escáner forense directo a la raíz plana
+        cp -fv ./build/src/gallium/targets/dril/libdril_dri.so ./pack_flat/libdril_dri.so
+        
+        # 3. Mantenemos localizadores flexibles para rastrear libGL y libglapi nativos generados
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
         find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
         
+        # Generamos el meta.json enlazando limpiamente a libvulkan_wrapper.so
         cat << 'EOF' > ./pack_flat/meta.json
         {
           "schemaVersion": 1,
@@ -166,11 +164,12 @@ jobs:
         }
         EOF
 
-        # LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/)
+        # 🟢 LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/ Estructurada)
         mkdir -p ./pack_usr/usr/lib
         mkdir -p ./pack_usr/usr/share/vulkan/icd.d
         
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
+        cp -fv ./build/src/gallium/targets/dril/libdril_dri.so ./pack_usr/usr/lib/libdril_dri.so
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
         find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
         
@@ -186,8 +185,12 @@ jobs:
 
         chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
         chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
+        
+        echo "=== VERIFICACIÓN DEL CONTENIDO INTEGRAL REAL DEL PACK ==="
+        ls -lh ./pack_flat
+        echo "========================================================="
 
-    - name: 🛠️ 10. Forjar Ambos Empaquetados en Paralelo (ZIP Plano & TAR.ZST Nivel 19)
+    - name: 🛠️ 9. Forjar Ambos Empaquetados en Paralelo (ZIP Plano & TAR.ZST Nivel 19)
       run: |
         # 1. Forjamos el ZIP plano para Bannerlator
         cd pack_flat
@@ -199,7 +202,7 @@ jobs:
         tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
         cd ..
 
-    - name: 📤 11. Subir el Arsenal Gráfico Completo a los Artefactos de GitHub
+    - name: 📤 10. Subir el Arsenal Gráfico Completo a los Artefactos de GitHub
       uses: actions/upload-artifact@v4
       with:
         name: panvk-mali-bifrost-dual-pack
