@@ -14,7 +14,7 @@ jobs:
         build-type: [release]
 
     steps:
-    - name: 📥 1. Clonar tu propio Repositorio Fork Directo
+    - name: 📥 1. Clonar tu propio Repositorio Fork de Mesa
       uses: actions/checkout@v4
 
     - name: 🧬 2. Aplicar Parche Inicial de Entorno Termux
@@ -93,10 +93,23 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Modelo Monolítico Estático Total)
+    - name: 🔧 6. Secuestrar Subproyecto Adrenotools y Configurar Meson Cruzado Monolítico
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
+        
+        # 🟢 EL SECUESTRO DE LA ENVOLTURA: 
+        # Modificamos el archivo de envoltura (.wrap) de Meson si existe en subprojects/ 
+        # o inyectamos la redirección forzada para obligar a Mesa a clonar TU PROPIO repositorio 
+        # modificado de libadrenotools (Over-cmd) con el bypass de Mali ya soldado en sus venas.
+        mkdir -p subprojects
+        cat << 'EOF' > subprojects/adrenotools.wrap
+        [wrap-git]
+        directory = adrenotools
+        url = https://github.com/Over-cmd/libadrenotools.git
+        revision = master
+        EOF
+        echo "-> Subproyecto adrenotools enrutado con éxito a las fuentes de Over-cmd."
         
         export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
         export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -108,9 +121,6 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
-        # 🟢 FORZADO MONOLÍTICO DE BAJO NIVEL: Desactivamos shared-glapi para obligar a Meson 
-        # a fusionar e inyectar todas las dependencias de Gallium y Dril directamente ADENTRO del 
-        # binario principal libvulkan_panfrost.so, encapsulándolo todo en un solo inodo autosuficiente sin dependencias externas.
         meson setup build --cross-file android-cross.txt \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
@@ -134,7 +144,7 @@ jobs:
             -Dllvm=disabled \
             -Dpanfrost-kmds=kbase,panthor
             
-    - name: 🚀 7. Compilar Proyecto Real Saneado via Ninja Nativo
+    - name: 🚀 7. Compilar Proyecto Monolítico Híbrido Real via Ninja Nativo
       run: |
         meson compile -C build
 
@@ -143,7 +153,7 @@ jobs:
         # LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana Inmune)
         mkdir -p ./pack_flat
         
-        # Copiamos tu gigante de 18MB que ahora lleva a dril y Gallium fusionados por dentro
+        # Copiamos tu gigante de 18MB que ahora lleva tus parches de C y tu adrenotools hibrido fusionados
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
         
         # Mantenemos las firmas básicas sueltas en la raíz por compatibilidad del Linker de Android
@@ -153,10 +163,10 @@ jobs:
         cat << 'EOF' > ./pack_flat/meta.json
         {
           "schemaVersion": 1,
-          "name": "Mesa PanVK Driver for Mali",
-          "description": "Custom PanVK Vulkan driver for MediaTek",
-          "author": "Mesa Community",
-          "packageVersion": "26.2",
+          "name": "Mesa PanVK Driver for Mali G52",
+          "description": "Custom PanVK Hibrido con Adrenotools-Mali Bypass",
+          "author": "Mesa & Over-cmd Community",
+          "packageVersion": "26.3",
           "vendor": "Mesa",
           "driverVersion": "1",
           "libraryName": "libvulkan_wrapper.so"
