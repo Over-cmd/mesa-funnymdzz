@@ -16,12 +16,12 @@ TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando bypass molecular en inodo real: $TARGET_INSTANCE"
     sed -i '1i #include <stdlib.h>' "$TARGET_INSTANCE"
-    sed -i '2i __attribute__((constructor)) void panvk_instance_mali_init() {' "$TARGET_INSTANCE"
+    sed -i '2i __attribute__((constructor)) static void panvk_instance_mali_init() {' "$TARGET_INSTANCE"
     sed -i '3i     setenv("PAN_MESA_DEBUG", "kbase", 1);' "$TARGET_INSTANCE"
     sed -i '4i     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);' "$TARGET_INSTANCE"
     sed -i '5i     setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);' "$TARGET_INSTANCE"
     sed -i '6i }' "$TARGET_INSTANCE"
-    echo "-> Parches de elusión inyectados de fábrica en la raíz de Vulkan."
+    echo "-> Parches de elusión inyectados de fábrica en la raíz de Vulkan con firma static void."
 fi
 
 echo "========================================================="
@@ -36,28 +36,29 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-meson setup build --cross-file android-cross.txt \
+# Forzamos la compilación monolítica estática del subproyecto local
+meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=static \
     -Dbuildtype=release \
     -Dplatforms=x11 \
     -Dplatform-sdk-version=30 \
     -Dglx=disabled \
     -Dgbm=disabled \
-            -Degl=disabled \
-            -Dopengl=true \
-            -Dgles1=disabled \
-            -Dgles2=disabled \
-            -Dglvnd=disabled \
-            -Dvalgrind=disabled \
-            -Dgallium-drivers=panfrost \
-            -Dshared-glapi=disabled \
-            -Dzstd=disabled \
-            -Dgallium-rusticl=false \
-            -Dmesa-clc=system \
-            -Dprecomp-compiler=system \
-            -Dvulkan-drivers=panfrost \
-            -Dllvm=disabled \
-            -Dpanfrost-kmds=kbase,panthor
+    -Degl=disabled \
+    -Dopengl=true \
+    -Dgles1=disabled \
+    -Dgles2=disabled \
+    -Dglvnd=disabled \
+    -Dvalgrind=disabled \
+    -Dgallium-drivers=panfrost \
+    -Dshared-glapi=disabled \
+    -Dzstd=disabled \
+    -Dgallium-rusticl=false \
+    -Dmesa-clc=system \
+    -Dprecomp-compiler=system \
+    -Dvulkan-drivers=panfrost \
+    -Dllvm=disabled \
+    -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
 echo "🚀 3. COMPILANDO CONTROLADOR MONOLÍTICO CON NINJA"
