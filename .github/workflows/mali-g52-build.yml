@@ -93,7 +93,7 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Suelo 100% Saneado de Fábrica)
+    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Modelo Monolítico Estático Total)
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
@@ -108,6 +108,9 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
+        # 🟢 FORZADO MONOLÍTICO DE BAJO NIVEL: Desactivamos shared-glapi para obligar a Meson 
+        # a fusionar e inyectar todas las dependencias de Gallium y Dril directamente ADENTRO del 
+        # binario principal libvulkan_panfrost.so, encapsulándolo todo en un solo inodo autosuficiente sin dependencias externas.
         meson setup build --cross-file android-cross.txt \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
@@ -122,7 +125,7 @@ jobs:
             -Dglvnd=disabled \
             -Dvalgrind=disabled \
             -Dgallium-drivers=panfrost \
-            -Dshared-glapi=enabled \
+            -Dshared-glapi=disabled \
             -Dzstd=disabled \
             -Dgallium-rusticl=false \
             -Dmesa-clc=system \
@@ -135,22 +138,18 @@ jobs:
       run: |
         meson compile -C build
 
-    - name: 📦 8. Ensamblar Ambas Estructuras Reales Capturando la Suite de Shaders Completa
+    - name: 📦 8. Ensamblar Ambas Estructuras de Salida (Layout Monolítico Independiente Puro)
       run: |
-        # 🟢 LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana con Suite Completa)
+        # LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana Inmune)
         mkdir -p ./pack_flat
         
-        # 1. Copiamos tu gigante de 18MB monolítico puro como libvulkan_wrapper.so
+        # Copiamos tu gigante de 18MB que ahora lleva a dril y Gallium fusionados por dentro
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
         
-        # 2. Capturamos el binario real de Gallium que arrojó el escáner forense directo a la raíz plana
-        cp -fv ./build/src/gallium/targets/dril/libdril_dri.so ./pack_flat/libdril_dri.so
-        
-        # 3. Mantenemos localizadores flexibles para rastrear libGL y libglapi nativos generados
+        # Mantenemos las firmas básicas sueltas en la raíz por compatibilidad del Linker de Android
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
         find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
         
-        # Generamos el meta.json enlazando limpiamente a libvulkan_wrapper.so
         cat << 'EOF' > ./pack_flat/meta.json
         {
           "schemaVersion": 1,
@@ -164,12 +163,11 @@ jobs:
         }
         EOF
 
-        # 🟢 LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/ Estructurada)
+        # LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/)
         mkdir -p ./pack_usr/usr/lib
         mkdir -p ./pack_usr/usr/share/vulkan/icd.d
         
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
-        cp -fv ./build/src/gallium/targets/dril/libdril_dri.so ./pack_usr/usr/lib/libdril_dri.so
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
         find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
         
