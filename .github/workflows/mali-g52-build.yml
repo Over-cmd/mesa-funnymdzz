@@ -93,19 +93,16 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Clonar de Forma Coercitiva tu Subproyecto con Nombre de Inodo Saneado
+    - name: 🔧 6. Clonar tu libadrenotools Real y Forzar Configuración Cruzada con Flag Saneada
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
         
-        # 🟢 CORRECCIÓN MAESTRA DEL CLONADO:
-        # Borramos cualquier rastro parásito previo y forzamos a Git a clonar tu repositorio real de 
-        # libadrenotools guardándolo única y obligatoriamente bajo el nombre de carpeta 'subprojects/adrenotools' 
-        # exigido por las macros internas de Mesa. Esto amarra tu bypass al 100% en la compilación.
+        # Clonamos tu repositorio REAL 'libadrenotools.git' en la carpeta exigida por Meson
         rm -rf subprojects/adrenotools
         mkdir -p subprojects
         git clone --depth 1 https://github.com/Over-cmd/libadrenotools.git subprojects/adrenotools
-        echo "-> Inodo biónico de Over-cmd/libadrenotools inyectado y renombrado con éxito."
+        echo "-> Inodo biónico de Over-cmd/libadrenotools descargado con éxito."
         
         export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
         export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -117,8 +114,10 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
-        # Activamos '--wrap-mode=force' para que use estrictamente el subproyecto renombrado local
-        meson setup build --cross-file android-cross.txt --wrap-mode=force \
+        # 🟢 LA ESTOCADA DE LA FLAG CORREGIDA: Cambiamos '--wrap-mode=force' por '--wrap-mode=forcefallback'.
+        # Esto cumple con la sintaxis estricta del nuevo Meson del Host, obligándolo de forma legal
+        # a amarrar tu subproyecto local inyectando tus parches de Mali en el binario final.
+        meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
             -Dplatforms=x11 \
