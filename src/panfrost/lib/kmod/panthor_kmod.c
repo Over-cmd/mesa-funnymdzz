@@ -12,6 +12,9 @@
 
 #include "util/hash_table.h"
 #include "util/libsync.h"
+#define sync_wait(x,y) 0
+#define sync_merge(a,b,c) (-1)
+#define sync_accumulate(a,b,c) ((void)0)
 #include "util/macros.h"
 #include "util/os_time.h"
 #include "util/stack_array.h"
