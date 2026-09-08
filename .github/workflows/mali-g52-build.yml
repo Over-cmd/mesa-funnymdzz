@@ -93,10 +93,15 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Clonar tu libadrenotools Real y Forzar Configuración Cruzada con Flag Saneada
+    - name: 🔧 6. Soldar adrenotools en meson.build, Clonar Fuentes y Configurar Meson Cruzado
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
+        
+        # 🟢 EL REMATE DE INGENIERÍA EN EL MESON.BUILD:
+        # Usamos sed para inyectar la directiva subproject en la linea 25 de tu meson.build real, 
+        # obligando a la fundición a compilar de forma legal adrenotools junto a las dependencias base.
+        sed -i '25i subproject('\''adrenotools'\'')' meson.build
         
         # Clonamos tu repositorio REAL 'libadrenotools.git' en la carpeta exigida por Meson
         rm -rf subprojects/adrenotools
@@ -114,9 +119,7 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
-        # 🟢 LA ESTOCADA DE LA FLAG CORREGIDA: Cambiamos '--wrap-mode=force' por '--wrap-mode=forcefallback'.
-        # Esto cumple con la sintaxis estricta del nuevo Meson del Host, obligándolo de forma legal
-        # a amarrar tu subproyecto local inyectando tus parches de Mali en el binario final.
+        # Activamos '--wrap-mode=forcefallback' para amarrar la compilación estricta local
         meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
@@ -149,10 +152,8 @@ jobs:
         # LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana Inmune)
         mkdir -p ./pack_flat
         
-        # Copiamos tu gigante de 18MB que ahora lleva tus parches de C y tu adrenotools hibrido fusionados
+        # Copiamos tu driver de 18MB que ahora lleva tus parches de C y tu adrenotools hibrido fusionados por dentro
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
-        
-        # Mantenemos las firmas básicas sueltas en la raíz por compatibilidad del Linker de Android
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
         find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
         
