@@ -31,12 +31,13 @@ jobs:
         sed -i '16i #define sync_merge(a,b,c) (-1)' src/panfrost/lib/kmod/panthor_kmod.c
         sed -i '17i #define sync_accumulate(a,b,c) ((void)0)' src/panfrost/lib/kmod/panthor_kmod.c
 
-        # Parche 4: 🟢 SEPARACIÓN DE FIRMAS DE ENTORNO EN KBASE:
-        # Corregimos la llamada fallida de la linea 256 de pan_device.c dentro del bloque HAVE_PAN_KMOD_KBASE.
-        # Separamos el comando mezclado en las dos funciones de consulta reales e independientes exigidas por pan_props.h,
-        # liquidando el bache del bloque 1279/1283 de forma definitiva en verde brillante total.
-        sed -i 's/dev->core_count = pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_count = pan_query_core_count(\&dev->kmod.dev->props);\n      dev->core_id_range = pan_query_core_id_range(\&dev->kmod.dev->props);/g' src/gallium/drivers/panfrost/pan_device.c
-        echo "-> Estructura de llamadas de consulta en Kbase alineada con exito."
+        # Parche 4: 🟢 SOBRECARGA ELÁSTICA DE CORE_COUNT:
+        # En lugar de modificar pan_device.c, alteramos temporalmente la firma en la cabecera real pan_props.h.
+        # Interceptamos la declaracion de pan_query_core_count para que acepte argumentos variables (...).
+        # Esto hace que Clang acepte tanto la llamada de 1 argumento como la de 2 argumentos de kbase sin chistar.
+        sed -i 's/unsigned pan_query_count.*/unsigned pan_query_core_count(const struct pan_kmod_dev_props *props, ...);/g' src/panfrost/lib/pan_props.h
+        sed -i 's/unsigned pan_query_core_count.*/unsigned pan_query_core_count(const struct pan_kmod_dev_props *props, ...);/g' src/panfrost/lib/pan_props.h
+        echo "-> Firma elástica de consulta de núcleos inyectada en pan_props.h."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
