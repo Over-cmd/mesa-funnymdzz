@@ -17,7 +17,7 @@ jobs:
     - name: 📥 1. Clonar tu propio Repositorio Fork Directo
       uses: actions/checkout@v4
 
-    - name: 🧬 2. Aplicar Parches Quirúrgicos por Inserción Segura (Conserva Gralloc)
+    - name: 🧬 2. Aplicar Saneamiento de Inodos en Fuentes de Mesa (Original Puro)
       run: |
         # Parche 1: anon_file.c para memfd_create en entornos Termux sin alterar el codigo
         sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -26,21 +26,9 @@ jobs:
         mkdir -p src/gallium/auxiliary/util
         echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
         
-        # Parche 3: 🟢 INYECCIÓN MAESTRA POR APPEND PROTEGIDO: 
-        # En lugar de machacar src/util/ con un cat limpio que borraba la carpeta u_gralloc,
-        # usamos el operador '>>' para pegar la triada de stubs al final del archivo original de Mesa.
-        # Esto mantiene viva la cabecera force_aosp_abi.h, salvando el test inicial de Meson al 100%.
-        cat << 'EOF' >> src/util/libsync.h
-
-        /* Bypass bionico molecular inyectado para Bannerlator Móvil */
-        #ifndef SHIM_MESA_LIBSYNC_H
-        #define SHIM_MESA_LIBSYNC_H
-        static inline int sync_wait(int fd, int timeout) { return 0; }
-        static inline int sync_merge(const char *name, int fd1, int fd2) { return -1; }
-        static inline void sync_accumulate(const char *name, int *fd1, int fd2) { return; }
-        #endif
-        EOF
-        echo "-> Parches de inodos locales insertados de forma segura en las fuentes."
+        # 🟢 CONFI FUENTE SANEADA: Dejamos src/util/libsync.h intacto de fabrica, ya que tu Fork
+        # incluye nativamente las definiciones correctas de sync_wait, sync_merge y sync_accumulate.
+        echo "-> Codigo fuente original de tu Fork restaurado y saneado con éxito."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
@@ -108,7 +96,7 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Suelo 100% Estable Saneado)
+    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Suelo Limpio Sin Intervenciones)
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
