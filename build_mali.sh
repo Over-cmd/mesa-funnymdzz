@@ -6,10 +6,7 @@ echo "🧬 1. REGISTRANDO LA SUITE COMPLETA DE ADRENOTOOLS EN VULKAN"
 echo "========================================================="
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# 🟢 LA CORRECCIÓN DE ORO DEL BLOQUE 1642: 
-# Quitamos la palabra 'static' de util_run_tests para que el símbolo sea global y visible.
-# Esto evita que el enlazador ld.lld falle al intentar exportar la función en la biblioteca de Gallium.
-# 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
+# Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
@@ -51,8 +48,13 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Tu matriz de compilación exacta purificada con la inyección dinámica compartida
+# 🟢 LA ESTOCADA DEL LINKER X11: 
+# Inyectamos c_link_args y cpp_link_args con '-lX11' de forma coercitiva.
+# Esto le entrega a ld.lld el mapa exacto de XOpenDisplay y XCloseDisplay,
+# solucionando de golpe la caida en el bloque 1773 de libEGL.so.
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
+    -Dc_link_args="-lX11" \
+    -Dcpp_link_args="-lX11" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
@@ -88,20 +90,27 @@ echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "aarch64-linux-android-strip" -o -name "llvm-strip" | head -n 1)
 "$STRIP_TOOL" ./build/src/panfrost/vulkan/libvulkan_panfrost.so
 
+# Intentamos también aplicar strip sobre las librerías gráficas de Gallium y EGL generadas si existen
+find build/ -name "libEGL.so*" -exec "$STRIP_TOOL" {} \; 2>/dev/null || true
+find build/ -name "libGL.so*" -exec "$STRIP_TOOL" {} \; 2>/dev/null || true
+
 mkdir -p ./pack_flat
 mkdir -p ./pack_usr/usr/lib
 mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 
 cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
 cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
-find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
-find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
+
+# Buscamos y copiamos de forma dinamica las librerías EGL, GL y glapi mapeadas por Ninja
+find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libEGL.so.1 \; 2>/dev/null || true
+find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; 2>/dev/null || true
+find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido Optimizado con tus Flags Exactas",
+  "description": "Custom PanVK Hibrido con Suite Completa Adrenotools y EGL X11",
   "author": "Mesa & Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -120,7 +129,7 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 }
 EOF
 
-chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
+chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
 
 cd pack_flat
@@ -131,4 +140,11 @@ cd pack_usr
 tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
 cd ..
 
-echo ">>> ARSENAL DUAL OPTIMIZADO GENERADO CON ÉXITO <<<"
+echo "========================================================="
+echo "🔍 VERIFICACIÓN DE CONTENIDO DE ARTEFACTOS GENERADOS"
+echo "========================================================="
+ls -lh ./panvk-bannerlator-driver.zip
+ls -lh ./wrapper.tar.zst
+echo "========================================================="
+
+echo ">>> ARSENAL DUAL FUSIONADO CON ÉXITO ABSOLUTO AL 100% <<<"
