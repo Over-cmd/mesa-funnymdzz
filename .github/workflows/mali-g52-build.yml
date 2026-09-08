@@ -14,7 +14,7 @@ jobs:
         build-type: [release]
 
     steps:
-    - name: 📥 1. Clonar tu propio Repositorio Fork de Mesa
+    - name: 📥 1. Clonar tu propio Repositorio Fork Directo de Mesa
       uses: actions/checkout@v4
 
     - name: 🧬 2. Aplicar Parche Inicial de Entorno Termux
@@ -25,7 +25,7 @@ jobs:
         # Bypass auxiliar de pruebas complementarias de Gallium para evitar paros sintácticos
         mkdir -p src/gallium/auxiliary/util
         echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
-        echo "-> Entorno base de compilación verificado."
+        echo "-> Entorno base de fuentes de tu Fork verificado."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
@@ -93,21 +93,10 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Soldar adrenotools en meson.build, Clonar Fuentes y Configurar Meson Cruzado
+    - name: 🔧 6. Forzar Acoplamiento de Envoltura Local y Configurar Meson Cruzado Saneado
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
-        
-        # 🟢 EL REMATE DE INGENIERÍA EN EL MESON.BUILD:
-        # Usamos sed para inyectar la directiva subproject en la linea 25 de tu meson.build real, 
-        # obligando a la fundición a compilar de forma legal adrenotools junto a las dependencias base.
-        sed -i '25i subproject('\''adrenotools'\'')' meson.build
-        
-        # Clonamos tu repositorio REAL 'libadrenotools.git' en la carpeta exigida por Meson
-        rm -rf subprojects/adrenotools
-        mkdir -p subprojects
-        git clone --depth 1 https://github.com/Over-cmd/libadrenotools.git subprojects/adrenotools
-        echo "-> Inodo biónico de Over-cmd/libadrenotools descargado con éxito."
         
         export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
         export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -119,7 +108,9 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
-        # Activamos '--wrap-mode=forcefallback' para amarrar la compilación estricta local
+        # 🟢 LA BANDERA DE OBLIGACIÓN: Cambiamos '--wrap-mode' a 'forcefallback' de forma estricta.
+        # Al ver tu archivo 'adrenotools.wrap' local en la carpeta subprojects, Meson detendrá cualquier
+        # descarga generica e inyectara stasticamente tus fuentes de Over-cmd adentro del driver de Vulkan.
         meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
@@ -143,7 +134,7 @@ jobs:
             -Dllvm=disabled \
             -Dpanfrost-kmds=kbase,panthor
             
-    - name: 🚀 7. Compilar Proyecto Monolítico Híbrido Real via Ninja Nativo
+    - name: 🚀 7. Compilar Controlador Monolítico via Ninja Nativo
       run: |
         meson compile -C build
 
@@ -161,7 +152,7 @@ jobs:
         {
           "schemaVersion": 1,
           "name": "Mesa PanVK Driver for Mali G52",
-          "description": "Custom PanVK Hibrido con Adrenotools-Mali Bypass",
+          "description": "Custom PanVK Hibrido con Adrenotools-Mali Over-cmd Bypass",
           "author": "Mesa & Over-cmd Community",
           "packageVersion": "26.3",
           "vendor": "Mesa",
