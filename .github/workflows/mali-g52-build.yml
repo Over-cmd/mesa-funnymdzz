@@ -8,37 +8,12 @@ on:
 jobs:
   build-android-wrapper:
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        build-type: [release]
 
     steps:
     - name: 📥 1. Clonar tu propio Repositorio Fork Directo de Mesa
       uses: actions/checkout@v4
 
-    - name: 🧬 2. Aplicar Inyección Biónica Directa en el Corazón de Vulkan (Bypass Real)
-      run: |
-        # Parche 1: anon_file.c para memfd_create en entornos Termux sin alterar el codigo
-        sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
-        
-        # Parche 2: BYPASS DE PRUEBAS DE GALLIUM (Neutralización del script de pruebas u_tests.c)
-        mkdir -p src/gallium/auxiliary/util
-        echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
-        
-        # Parche 3: 🟢 LA ESTOCADA DEL INGENIERO: Inyectamos el constructor biónico de entorno
-        # directamente al inicio del archivo real src/panfrost/vulkan/panvk_device.c.
-        # Esto clava las tres variables lógicas y el bypass de Kbase adentro del propio cuerpo de Vulkan,
-        # obligando a Android a despertar el silicio en el microsegundo cero sin depender de subproyectos externos.
-        sed -i '20i #include <stdlib.h>' src/panfrost/vulkan/panvk_device.c
-        sed -i '21i __attribute__((constructor)) void panvk_mali_bionic_init() {' src/panfrost/vulkan/panvk_device.c
-        sed -i '22i     setenv("PAN_MESA_DEBUG", "kbase", 1);' src/panfrost/vulkan/panvk_device.c
-        sed -i '23i     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);' src/panfrost/vulkan/panvk_device.c
-        sed -i '24i     setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);' src/panfrost/vulkan/panvk_device.c
-        sed -i '25i }' src/panfrost/vulkan/panvk_device.c
-        echo "-> Bypass molecular grabado a fuego en las entrañas de Vulkan (PanVK)."
-
-    - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
+    - name: 🔧 2. Instalar Suite de Dependencias y Herramientas Gráficas en el Host
       run: |
         sudo apt-get update
         sudo apt-get install -y ninja-build pkg-config python3-mako python3-ply python3-yaml zstd \
@@ -51,12 +26,7 @@ jobs:
         sudo apt-get install -y llvm-20-dev libclang-20-dev libclc-20-dev libllvmspirvlib-20-dev spirv-tools libelf-dev
         sudo pip3 install --break-system-packages --ignore-installed mako PyYAML meson ninja packaging
 
-        echo "=== VERIFICACIÓN DE VERSIONES EN EL HOST ==="
-        meson --version
-        ninja --version
-        echo "============================================="
-
-    - name: 🔧 4. Generar las Tres Herramientas Nativas en el Host y Enlazar Shims de Funny
+    - name: 🔧 3. Generar las Tres Herramientas Nativas en el Host y Enlazar Shims de Funny
       run: |
         meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
         ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
@@ -68,31 +38,17 @@ jobs:
         echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
         echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
 
-    - name: 🧬 5. Forjar Shims del Sistema de Android (cutils/native_handle.h y pthread.h Global)
+    - name: 🧬 4. Forjar Shims del Sistema de Android (cutils/native_handle.h y pthread.h Global)
       run: |
         mkdir -p shims/include/cutils
-        
-        # Shim 1: cutils/native_handle.h para el bloque de despacho de Vulkan
         cat << 'EOF' > shims/include/cutils/native_handle.h
         #ifndef CUTILS_NATIVE_HANDLE_H
         #define CUTILS_NATIVE_HANDLE_H
         #include <stdint.h>
-        #ifdef __cplusplus
-        extern "C" {
-        #endif
-        typedef struct native_handle {
-            int version;
-            int numFds;
-            int numInts;
-            int data;
-        } native_handle_t;
-        #ifdef __cplusplus
-        }
-        #endif
+        typedef struct native_handle { int version; int numFds; int numInts; int data; } native_handle_t;
         #endif
         EOF
 
-        # Shim 2: pthread.h global para inyectar bypass de hilos biónicos ausentes en Android
         cat << 'EOF' > shims/include/pthread.h
         #ifndef SHIM_PTHREAD_H
         #define SHIM_PTHREAD_H
@@ -102,111 +58,13 @@ jobs:
         #define PTHREAD_CANCEL_ASYNCHRONOUS 0
         #endif
         EOF
-        echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado Saneado Puro
+    - name: 🚀 5. Otorgar Permisos de Ejecución y Detonar el Script build_mali.sh
       run: |
-        REAL_NDK="$ANDROID_NDK_LATEST_HOME"
-        echo "-> NDK del Host detectado en: $REAL_NDK"
-        
-        export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-        export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
-        
-        export PKG_CONFIG="/usr/bin/pkg-config"
-        export PKG_CONFIG_FOR_BUILD="/usr/bin/pkg-config"
-        export PKG_CONFIG_PATH_FOR_BUILD="/usr/lib/x86_64-linux-gnu/pkgconfig"
-        export PKG_CONFIG_PATH="$REAL_NDK/prebuilt/linux-x86_64/lib/pkgconfig"
+        chmod +x build_mali.sh
+        ./build_mali.sh
 
-        envsubst < android.toml > android-cross.txt
-
-        meson setup build --cross-file android-cross.txt \
-            -Ddefault_library=static \
-            -Dbuildtype=${{ matrix.build-type }} \
-            -Dplatforms=x11 \
-            -Dplatform-sdk-version=30 \
-            -Dglx=disabled \
-            -Dgbm=disabled \
-            -Degl=disabled \
-            -Dopengl=true \
-            -Dgles1=disabled \
-            -Dgles2=disabled \
-            -Dglvnd=disabled \
-            -Dvalgrind=disabled \
-            -Dgallium-drivers=panfrost \
-            -Dshared-glapi=disabled \
-            -Dzstd=disabled \
-            -Dgallium-rusticl=false \
-            -Dmesa-clc=system \
-            -Dprecomp-compiler=system \
-            -Dvulkan-drivers=panfrost \
-            -Dllvm=disabled \
-            -Dpanfrost-kmds=kbase,panthor
-            
-    - name: 🚀 7. Compilar Controlador Monolítico via Ninja Nativo
-      run: |
-        meson compile -C build
-
-    - name: 📦 8. Ensamblar Ambas Estructuras de Salida (Layout Monolítico Independiente Puro)
-      run: |
-        # LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana Inmune)
-        mkdir -p ./pack_flat
-        
-        # Copiamos tu driver de 18MB que ahora lleva el bypass biónico soldado en su propia piel de Vulkan
-        cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
-        find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
-        find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
-        
-        cat << 'EOF' > ./pack_flat/meta.json
-        {
-          "schemaVersion": 1,
-          "name": "Mesa PanVK Driver for Mali G52",
-          "description": "Custom PanVK Autoinyectable con Kbase Bypass",
-          "author": "Mesa & Over-cmd Community",
-          "packageVersion": "26.3",
-          "vendor": "Mesa",
-          "driverVersion": "1",
-          "libraryName": "libvulkan_wrapper.so"
-        }
-        EOF
-
-        # LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/)
-        mkdir -p ./pack_usr/usr/lib
-        mkdir -p ./pack_usr/usr/share/vulkan/icd.d
-        
-        cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
-        find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
-        find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
-        
-        cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-        {
-          "file_format_version": "1.0.0",
-          "ICD": {
-            "library_path": "libvulkan_wrapper.so",
-            "api_version": "1.3.289"
-          }
-        }
-        EOF
-
-        chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
-        chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
-        
-        echo "=== VERIFICACIÓN DEL CONTENIDO INTEGRAL REAL DEL PACK ==="
-        ls -lh ./pack_flat
-        echo "========================================================="
-
-    - name: 🛠️ 9. Forjar Ambos Empaquetados en Paralelo (ZIP Plano & TAR.ZST Nivel 19)
-      run: |
-        # 1. Forjamos el ZIP plano para Bannerlator
-        cd pack_flat
-        zip -r ../panvk-bannerlator-driver.zip ./*
-        cd ..
-
-        # 2. Forjamos el TAR.ZST de compresión extrema para Termux-X11
-        cd pack_usr
-        tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
-        cd ..
-
-    - name: 📤 10. Subir el Arsenal Gráfico Completo a los Artefactos de GitHub
+    - name: 📤 6. Subir el Arsenal Gráfico Completo a los Artefactos de GitHub
       uses: actions/upload-artifact@v4
       with:
         name: panvk-mali-bifrost-dual-pack
