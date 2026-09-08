@@ -64,7 +64,7 @@ jobs:
         chmod +x build_mali.sh
         ./build_mali.sh
 
-    - name: 📤 6. Capturar y Subir el Arsenal Gráfico Dual (ZIP + TAR.ZST)
+    - name: 📤 6. Capturar y Subir el Arsenal Gráfico Dual Saneado (ZIP + TAR.ZST)
       uses: actions/upload-artifact@v4
       with:
         name: panvk-mali-bifrost-dual-pack
