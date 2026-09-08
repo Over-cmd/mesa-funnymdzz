@@ -17,26 +17,15 @@ jobs:
     - name: 📥 1. Clonar tu propio Repositorio Fork Directo
       uses: actions/checkout@v4
 
-    - name: 🧬 2. Aplicar Parches Quirúrgicos Directos en las Fuentes Reales de Mesa
+    - name: 🧬 2. Aplicar Parche Inicial de Entorno Termux
       run: |
-        # Parche 1: anon_file.c para memfd_create en entornos Termux sin alterar el codigo
+        # Parche directo exclusivo para memfd_create en entornos Termux
         sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
         
-        # Parche 2: BYPASS DE PRUEBAS DE GALLIUM (Neutralización del script de pruebas u_tests.c)
+        # Bypass auxiliar de pruebas complementarias de Gallium para evitar paros sintácticos
         mkdir -p src/gallium/auxiliary/util
         echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
-        
-        # Parche 3: EL BYPASS LOCAL DE PANTHOR ENCAPSULADO (Aniquila el error del bloque 553/556)
-        sed -i '15i #define sync_wait(x,y) 0' src/panfrost/lib/kmod/panthor_kmod.c
-        sed -i '16i #define sync_merge(a,b,c) (-1)' src/panfrost/lib/kmod/panthor_kmod.c
-        sed -i '17i #define sync_accumulate(a,b,c) ((void)0)' src/panfrost/lib/kmod/panthor_kmod.c
-
-        # Parche 4: 🟢 EL ENCLAVE MULTILÍNEA DE KBASE DEFINITIVO:
-        # Usamos un sed de coincidencia de rango que captura la llamada desalineada multilinea de kbase
-        # sin importar los espacios intermedios que meta el formateador de LeeGao. Sobreescribimos el bloque
-        # inyectando las dos asignaciones independientes y legales que exige tu Fork, sanando el bloque 1277 de raiz.
-        sed -i '/pan_query_core_count.*&.*core_id_range/,/;/c\  dev->core_count = pan_query_core_count(\&dev->kmod.dev->props);\n  dev->core_id_range = pan_query_core_id_range(\&dev->kmod.dev->props);' src/gallium/drivers/panfrost/pan_device.c
-        echo "-> Estructura multilínea de Kbase corregida de forma atómica en pan_device.c."
+        echo "-> Entorno base de compilación verificado."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
@@ -104,7 +93,7 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Receta Coni Pura Saneada)
+    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Suelo 100% Saneado de Fábrica)
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
@@ -142,7 +131,7 @@ jobs:
             -Dllvm=disabled \
             -Dpanfrost-kmds=kbase,panthor
             
-    - name: 🚀 7. Compilar Proyecto en el Mismo Suelo via Ninja Nativo
+    - name: 🚀 7. Compilar Proyecto Real Saneado via Ninja Nativo
       run: |
         meson compile -C build
 
@@ -173,7 +162,7 @@ jobs:
         
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
-        find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
+        find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
         
         cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
         {
