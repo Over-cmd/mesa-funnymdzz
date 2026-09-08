@@ -93,23 +93,19 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Secuestrar Subproyecto Adrenotools y Configurar Meson Cruzado Monolítico
+    - name: 🔧 6. Clonar de Forma Coercitiva tu Subproyecto con Nombre de Inodo Saneado
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
         
-        # 🟢 EL SECUESTRO DE LA ENVOLTURA: 
-        # Modificamos el archivo de envoltura (.wrap) de Meson si existe en subprojects/ 
-        # o inyectamos la redirección forzada para obligar a Mesa a clonar TU PROPIO repositorio 
-        # modificado de libadrenotools (Over-cmd) con el bypass de Mali ya soldado en sus venas.
+        # 🟢 CORRECCIÓN MAESTRA DEL CLONADO:
+        # Borramos cualquier rastro parásito previo y forzamos a Git a clonar tu repositorio real de 
+        # libadrenotools guardándolo única y obligatoriamente bajo el nombre de carpeta 'subprojects/adrenotools' 
+        # exigido por las macros internas de Mesa. Esto amarra tu bypass al 100% en la compilación.
+        rm -rf subprojects/adrenotools
         mkdir -p subprojects
-        cat << 'EOF' > subprojects/adrenotools.wrap
-        [wrap-git]
-        directory = adrenotools
-        url = https://github.com/Over-cmd/libadrenotools.git
-        revision = master
-        EOF
-        echo "-> Subproyecto adrenotools enrutado con éxito a las fuentes de Over-cmd."
+        git clone --depth 1 https://github.com/Over-cmd/subprojects/adrenotools
+        echo "-> Inodo biónico de Over-cmd/libadrenotools inyectado y renombrado con éxito."
         
         export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
         export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -121,7 +117,8 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
-        meson setup build --cross-file android-cross.txt \
+        # Activamos '--wrap-mode=force' para que use estrictamente el subproyecto renombrado local
+        meson setup build --cross-file android-cross.txt --wrap-mode=force \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
             -Dplatforms=x11 \
