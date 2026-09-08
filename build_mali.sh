@@ -36,12 +36,12 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# 🟢 CONFIGURACIÓN INTEGRAL DE ALTO PESO: 
-# Cambiamos buildtype a debugoptimized y forzamos strip=false. 
-# Esto le prohíbe a Clang pasar la cuchilla de recorte, manteniendo vivos los 17.6 MiB reales 
-# de datos con todo tu adrenotools y las tablas de simbolos completas soldadas por dentro.
+# 🟢 CONFIGURACIÓN MAESTRA DE INSTANCIAS COMPARTIDAS:
+# Cambiamos default_library=both y activamos shared-glapi=enabled.
+# Esto obliga al compilador a inyectar tu adrenotools de Over-cmd como una biblioteca compartida dinamica real,
+# incrustando tus instancias de elusion en la tabla de exportación ELF para que Android las ejecute en frio.
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
-    -Ddefault_library=static \
+    -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
     -Db_lto=false \
@@ -56,7 +56,7 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dglvnd=disabled \
     -Dvalgrind=disabled \
     -Dgallium-drivers=panfrost \
-    -Dshared-glapi=disabled \
+    -Dshared-glapi=enabled \
     -Dzstd=disabled \
     -Dgallium-rusticl=false \
     -Dmesa-clc=system \
@@ -66,14 +66,14 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
-echo "🚀 3. COMPILANDO CONTROLADOR MONOLÍTICO COMPLETO CON NINJA"
+echo "🚀 3. COMPILANDO CONTROLADOR MONOLÍTICO DINÁMICO CON NINJA"
 echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. ENSAMBLANDO ARSENAL DUAL CON PESO REAL AUDITADO"
+echo "📦 4. ENSAMBLANDO ARSENAL ZIP PLANO CON EXPORTACIÓN REAL"
 echo "========================================================="
-# Estructura 1: ZIP Plano para Bannerlator
+# Creamos la única estructura plana de salida para Bannerlator
 mkdir -p ./pack_flat
 cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
 find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
@@ -83,7 +83,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Autoinyectable Monolitico Completo",
+  "description": "Custom PanVK Hibrido con Instancias Dinamicas de Kbase",
   "author": "Mesa & Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -92,39 +92,18 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-# Estructura 2: TAR.ZST para Termux-X11 (Raíz usr/)
-mkdir -p ./pack_usr/usr/lib
-mkdir -p ./pack_usr/usr/share/vulkan/icd.d
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
-find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
-find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
-
-cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-{
-  "file_format_version": "1.0.0",
-  "ICD": {
-    "library_path": "libvulkan_wrapper.so",
-    "api_version": "1.3.289"
-  }
-}
-EOF
-
-chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
-chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
+chmod 755 ./pack_flat/*.so*
+chmod 644 ./pack_flat/meta.json
 
 echo "========================================================="
-echo "🔍 AUDITORÍA DE VERIFICACIÓN DE MEGABYTES EN DIRECTORIO"
+echo "🔍 AUDITORÍA DE VERIFICACIÓN DE MEGABYTES EN EL DISCO"
 echo "========================================================="
 ls -lh ./pack_flat/libvulkan_wrapper.so
 echo "========================================================="
 
-# Forjado de empaquetados
+# Forjamos el único empaquetado ZIP plano
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
 
-cd pack_usr
-tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
-cd ..
-
-echo ">>> FORJA FINALIZADA CON ÉXITO ABSOLUTO <<<"
+echo ">>> FORJA UNIFICADA FINALIZADA CON ÉXITO ABSOLUTO <<<"
