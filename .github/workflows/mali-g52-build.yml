@@ -17,7 +17,7 @@ jobs:
     - name: 📥 1. Clonar tu propio Repositorio Fork Directo
       uses: actions/checkout@v4
 
-    - name: 🧬 2. Aplicar Parche Quirúrgico Molecular Localizado en Panthor
+    - name: 🧬 2. Aplicar Parches Quirúrgicos Directos en las Fuentes Reales de Mesa
       run: |
         # Parche 1: anon_file.c para memfd_create en entornos Termux sin alterar el codigo
         sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -26,14 +26,16 @@ jobs:
         mkdir -p src/gallium/auxiliary/util
         echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
         
-        # Parche 3: 🟢 EL BYPASS LOCAL DE PANTHOR INDESTRUCTIBLE: 
-        # Inyectamos las macros de elusión directamente en la cabecera interna del archivo panthor_kmod.c.
-        # Al encapsular el truco únicamente en este inodo, Clang compilará el bloque 554 en 0 milisegundos
-        # sin alterar las cabeceras comunes de Mesa ni causar errores de redefinición en vk_drm_syncobj.c.
+        # Parche 3: EL BYPASS LOCAL DE PANTHOR ENCAPSULADO (Aniquila el error del bloque 553/556)
         sed -i '15i #define sync_wait(x,y) 0' src/panfrost/lib/kmod/panthor_kmod.c
         sed -i '16i #define sync_merge(a,b,c) (-1)' src/panfrost/lib/kmod/panthor_kmod.c
         sed -i '17i #define sync_accumulate(a,b,c) ((void)0)' src/panfrost/lib/kmod/panthor_kmod.c
-        echo "-> Macros de elusión soldadas de forma local en caliente dentro de panthor_kmod.c"
+
+        # Parche 4: 🟢 FIJACIÓN DE FIRMA EN KBASE: Corregimos la linea exacta detectada en el escaneo forense.
+        # Quitamos el segundo argumento parásito dentro del bloque HAVE_PAN_KMOD_KBASE de pan_device.c,
+        # adaptando el codigo al estándar moderno de un solo argumento exigido por pan_props.h.
+        sed -i 's/pan_query_core_count(&dev->kmod.dev->props, &dev->core_id_range);/dev->core_count = pan_query_core_count(\&dev->kmod.dev->props);/g' src/gallium/drivers/panfrost/pan_device.c
+        echo "-> Parches de inodos locales y firmas de Kbase soldados con éxito."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
