@@ -9,8 +9,10 @@ sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HA
 # 🟢 LA CORRECCIÓN DE ORO DEL BLOQUE 1642: 
 # Quitamos la palabra 'static' de util_run_tests para que el símbolo sea global y visible.
 # Esto evita que el enlazador ld.lld falle al intentar exportar la función en la biblioteca de Gallium.
+# 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
-echo "void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
+echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
+echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
