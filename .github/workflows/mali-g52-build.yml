@@ -1,4 +1,4 @@
-name: Build PanVK Bifrost Vulkan 1.3 Generic Wrapper (ZIP Monolítico Bannerlator)
+name: Build PanVK Bifrost Vulkan 1.3 Dual Pack (ZIP Bannerlator & TAR.ZST Termux)
 
 on:
   push:
@@ -21,15 +21,11 @@ jobs:
       run: |
         # Parche directo para memfd_create en entornos Termux sin alterar el codigo
         sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
-        
-        # Parche directo para el script auxiliar u_tests.c de Gallium
-        mkdir -p src/gallium/auxiliary/util
-        echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
 
-    - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm y LLVM-20 Nativos del Sistema
+    - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build pkg-config python3-mako python3-ply python3-yaml \
+        sudo apt-get install -y ninja-build pkg-config python3-mako python3-ply python3-yaml zstd \
           gettext flex bison glslang-tools rustc cargo python3-pip zip libwayland-dev wayland-protocols \
           libxcb1-dev libx11-xcb-dev libxcb-dri3-dev libxcb-randr0-dev libxcb-xfixes0-dev \
           libxcb-dri2-0-dev libxcb-shm0-dev libxcb-glx0-dev libxcb-keysyms1-dev \
@@ -56,9 +52,10 @@ jobs:
         echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
         echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
 
-    - name: 🧬 5. Forjar Shims del Sistema de Android (cutils/native_handle.h y pthread.h Global)
+    - name: 🧬 5. Forjar Shims de Enrutamiento Legal al NDK (Evita Colisiones en el Bloque 504)
       run: |
         mkdir -p shims/include/cutils
+        mkdir -p shims/include/util
         
         # Shim 1: cutils/native_handle.h para el bloque de despacho de Vulkan
         cat << 'EOF' > shims/include/cutils/native_handle.h
@@ -80,7 +77,7 @@ jobs:
         #endif
         EOF
 
-        # Shim 2: pthread.h global para inyectar bypass de hilos biónicos ausentes en Android
+        # Shim 2: pthread.h global plano sin macros destructivas de reescritura
         cat << 'EOF' > shims/include/pthread.h
         #ifndef SHIM_PTHREAD_H
         #define SHIM_PTHREAD_H
@@ -90,18 +87,28 @@ jobs:
         #define PTHREAD_CANCEL_ASYNCHRONOUS 0
         #endif
         EOF
-        echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Inyectar el Bypass en el Arreglo de android.toml y Configurar Meson Cruzado
+        # Shim 3: util/libsync.h redirigido de forma limpia a las cabeceras reales de Google
+        cat << 'EOF' > shims/include/util/libsync.h
+        #ifndef SHIM_UTIL_LIBSYNC_H
+        #define SHIM_UTIL_LIBSYNC_H
+        #include <android/sync.h>
+        #endif
+        EOF
+
+        # Shim 4: libsync.h plano en la raíz redirigido a las cabeceras reales de Google
+        cat << 'EOF' > shims/include/libsync.h
+        #ifndef SHIM_LIBSYNC_H
+        #define SHIM_LIBSYNC_H
+        #include <android/sync.h>
+        #endif
+        EOF
+        echo "-> Suite de Shims purificada y enrutada de forma transparente al NDK."
+
+    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Modelo Puro Saneado)
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
-        
-        # 🟢 INYECCIÓN MAESTRA EN EL CROSS-FILE REAL: 
-        # Modificamos el layout exacto de tu android.toml real insertando las directivas del bypass
-        # dentro de los arreglos c_args y cpp_args justo al lado de '-fvisibility=default' de forma legal.
-        # Esto clava las macros de elusión en Clang manteniendo intactas todas las rutas nativas de xf86drm.h.
-        sed -i "s|'-fvisibility=default'\]|'-fvisibility=default', '-Dsync_wait(x,y)=0', '-Dsync_merge(a,b,c)=(-1)', '-Dsync_accumulate(a,b,c)=((void)0)'\]|g" android.toml
         
         export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
         export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -113,8 +120,8 @@ jobs:
 
         envsubst < android.toml > android-cross.txt
 
-        # 🟢 CONFI SANEADA TOTAL: Retiramos c_args de la linea de comandos para devolverle la vista 
-        # a Meson sobre xf86drm.h, permitiendo que Ninja pase de largo el bloque 183 impecablemente.
+        # 🟢 CONFI PURIFICADA TOTAL: No tocamos el android.toml con sed. Dejamos que el template original 
+        # guíe a Clang, eliminando los errores de colisión de macros en vk_drm_syncobj.c.
         meson setup build --cross-file android-cross.txt \
             -Ddefault_library=static \
             -Dbuildtype=${{ matrix.build-type }} \
@@ -142,18 +149,14 @@ jobs:
       run: |
         meson compile -C build
 
-    - name: 📦 8. Ensamblar Estructura Real 100% Plana Sin Carpeta usr/
+    - name: 📦 8. Ensamblar Ambas Estructuras de Salida (Raíz Plana & Raíz usr/)
       run: |
+        # 🟢 LÍNEA DE ENSAMBLAJE 1: ZIP Plano para Bannerlator (Raíz Plana)
         mkdir -p ./pack_flat
-
-        # 1. Copiamos el driver principal renombrado directamente en la raiz plana
         cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
-        
-        # 2. Capturamos libGL y libglapi generados por Gallium directo a la raiz plana
         find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \;
         find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \;
-
-        # 3. Inyectamos el manifiesto meta.json de fabrica exacto apuntando al Wrapper en la raiz
+        
         cat << 'EOF' > ./pack_flat/meta.json
         {
           "schemaVersion": 1,
@@ -167,21 +170,43 @@ jobs:
         }
         EOF
 
-        chmod 755 ./pack_flat/*.so*
-        chmod 644 ./pack_flat/meta.json
+        # 🟢 LÍNEA DE ENSAMBLAJE 2: TAR.ZST para Termux-X11 (Raíz usr/)
+        mkdir -p ./pack_usr/usr/lib
+        mkdir -p ./pack_usr/usr/share/vulkan/icd.d
         
-        echo "=== VERIFICACIÓN DEL CONTENIDO REAL DEL PACK ==="
-        ls -la ./pack_flat
-        echo "================================================"
+        cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
+        find build/ -name "libGL.so*" -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \;
+        find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \;
+        
+        cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
+        {
+          "file_format_version": "1.0.0",
+          "ICD": {
+            "library_path": "libvulkan_wrapper.so",
+            "api_version": "1.3.289"
+          }
+        }
+        EOF
 
-    - name: 🛠️ 9. Forjar Empaquetado ZIP Plano de Instalación Gráfica Directa
+        chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so*
+        chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
+
+    - name: 🛠️ 9. Forjar Ambos Empaquetados en Paralelo (ZIP Plano & TAR.ZST Nivel 19)
       run: |
+        # 1. Forjamos el ZIP plano para Bannerlator
         cd pack_flat
         zip -r ../panvk-bannerlator-driver.zip ./*
         cd ..
 
-    - name: 📤 10. Subir Artefacto ZIP de Producción a GitHub
+        # 2. Forjamos el TAR.ZST estructurado con jerarquía usr/ para Termux
+        cd pack_usr
+        tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
+        cd ..
+
+    - name: 📤 10. Subir el Arsenal Gráfico Completo a los Artefactos de GitHub
       uses: actions/upload-artifact@v4
       with:
-        name: panvk-mali-bannerlator-zip
-        path: panvk-bannerlator-driver.zip
+        name: panvk-mali-bifrost-dual-pack
+        path: |
+          panvk-bannerlator-driver.zip
+          wrapper.tar.zst
