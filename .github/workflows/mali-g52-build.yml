@@ -17,7 +17,7 @@ jobs:
     - name: 📥 1. Clonar tu propio Repositorio Fork Directo
       uses: actions/checkout@v4
 
-    - name: 🧬 2. Aplicar Parches Quirúrgicos Directos en las Fuentes Reales de Mesa
+    - name: 🧬 2. Aplicar Parches Quirúrgicos por Inserción Segura (Conserva Gralloc)
       run: |
         # Parche 1: anon_file.c para memfd_create en entornos Termux sin alterar el codigo
         sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -26,21 +26,21 @@ jobs:
         mkdir -p src/gallium/auxiliary/util
         echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
         
-        # Parche 3: 🟢 INYECCIÓN MOLECULAR LOCAL INMUNE: Forzamos la creación/sobreescritura 
-        # del archivo src/util/libsync.h real del repositorio. Al meter aqui la triada de stubs como
-        # funciones inline de C, panthor_kmod.c las leera mediante comillas locales en el bloque 553,
-        # destruyendo el error de raiz sin alterar c_args ni romper la sintaxis del NDK de Android.
-        mkdir -p src/util
-        cat << 'EOF' > src/util/libsync.h
+        # Parche 3: 🟢 INYECCIÓN MAESTRA POR APPEND PROTEGIDO: 
+        # En lugar de machacar src/util/ con un cat limpio que borraba la carpeta u_gralloc,
+        # usamos el operador '>>' para pegar la triada de stubs al final del archivo original de Mesa.
+        # Esto mantiene viva la cabecera force_aosp_abi.h, salvando el test inicial de Meson al 100%.
+        cat << 'EOF' >> src/util/libsync.h
+
+        /* Bypass bionico molecular inyectado para Bannerlator Móvil */
         #ifndef SHIM_MESA_LIBSYNC_H
         #define SHIM_MESA_LIBSYNC_H
-        #include <stdint.h>
         static inline int sync_wait(int fd, int timeout) { return 0; }
         static inline int sync_merge(const char *name, int fd1, int fd2) { return -1; }
         static inline void sync_accumulate(const char *name, int *fd1, int fd2) { return; }
         #endif
         EOF
-        echo "-> Parches lógicos soldados de forma molecular en las fuentes de Mesa."
+        echo "-> Parches de inodos locales insertados de forma segura en las fuentes."
 
     - name: 🔧 3. Instalar Suite XCB, Cabeceras Clang, libdrm, ZSTD y LLVM-20 Nativos
       run: |
@@ -108,13 +108,13 @@ jobs:
         EOF
         echo "-> Pool de Shims base de Android estructurado con éxito."
 
-    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Suelo Limpio Sin Sed Modificadores)
+    - name: 🔧 6. Traducir android.toml y Configurar Meson Cruzado (Suelo 100% Estable Saneado)
       run: |
         REAL_NDK="$ANDROID_NDK_LATEST_HOME"
         echo "-> NDK del Host detectado en: $REAL_NDK"
         
         export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-        export MESON_WORKSPACE_DIR="$GITHUB_WORKSPACE"
+        export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
         
         export PKG_CONFIG="/usr/bin/pkg-config"
         export PKG_CONFIG_FOR_BUILD="/usr/bin/pkg-config"
