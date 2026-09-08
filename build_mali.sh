@@ -6,8 +6,11 @@ echo "🧬 1. REGISTRANDO LA SUITE COMPLETA DE ADRENOTOOLS EN VULKAN"
 echo "========================================================="
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
+# 🟢 LA CORRECCIÓN DE ORO DEL BLOQUE 1642: 
+# Quitamos la palabra 'static' de util_run_tests para que el símbolo sea global y visible.
+# Esto evita que el enlazador ld.lld falle al intentar exportar la función en la biblioteca de Gallium.
 mkdir -p src/gallium/auxiliary/util
-echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
+echo "void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
 
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
@@ -46,9 +49,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# 🟢 TU MATRIZ DE COMPILACIÓN PURIFICADA:
-# Hemos soldado tus flags exactas combinadas con el modo dual compartido de adrenotools
-# para apagar los subcomponentes innecesarios y concentrar el silicio en tu Mali G52.
+# Tu matriz de compilación exacta purificada con la inyección dinámica compartida
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
