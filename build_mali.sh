@@ -11,14 +11,10 @@ sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HA
 mkdir -p src/gallium/auxiliary/util
 echo "static void util_run_tests(void) {}" > src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 LA ESTOCADA MAESTRA FUSIONADA:
-# Inyectamos tu constructor de variables de entorno de Over-cmd y las funciones de redirección 
-# espejo de Kbase para tu GPU Mali G52 directamente en la cabecera real de panvk_instance.c.
-# Al quedar grabado en el inodo base que lee Android, tu driver de Vulkan ejecutará el bypass 
-# de adrenotools en el milisegundo cero, esquivando SELinux sin pedirle Root al móvil.
+# 3. Soldamos las variables de entorno y el puente directo en el inodo verificado de panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
-    echo "-> Soldando código biónico de adrenotools en inodo real de Vulkan: $TARGET_INSTANCE"
+    echo "-> Soldando código biónico de adrenotools inyectado en: $TARGET_INSTANCE"
     
     # Inyectamos las cabeceras del sistema necesarias para atrapar descriptores de archivos
     sed -i '1i #include <stdlib.h>' "$TARGET_INSTANCE"
@@ -27,7 +23,7 @@ if [ -f "$TARGET_INSTANCE" ]; then
     sed -i '4i #include <sys/stat.h>' "$TARGET_INSTANCE"
     sed -i '5i #include <android/log.h>' "$TARGET_INSTANCE"
     
-    # Inyectamos el constructor monolítico de tu bypass Over-cmd
+    # Inyectamos el constructor monolítico de tu bypass Over-cmd con firma static
     sed -i '6i __attribute__((constructor)) static void panvk_adrenotools_mali_init() {' "$TARGET_INSTANCE"
     sed -i '7i     setenv("PAN_MESA_DEBUG", "kbase", 1);' "$TARGET_INSTANCE"
     sed -i '8i     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);' "$TARGET_INSTANCE"
@@ -35,11 +31,12 @@ if [ -f "$TARGET_INSTANCE" ]; then
     sed -i '10i    __android_log_print(ANDROID_LOG_INFO, "MesaPanVK", "Bypass de Kbase para Mali G52 Activado");' "$TARGET_INSTANCE"
     sed -i '11i }' "$TARGET_INSTANCE"
     
-    # Inyectamos la redefinición del interceptor de archivos para burlar el candado de /dev/mali0 sin Root
-    sed -i '12i int hook_mali_open_bridge() {' "$TARGET_INSTANCE"
-    sed -i '13i     int fd = open("/dev/mali0", O_RDWR | O_CLOEXEC);' "$TARGET_INSTANCE"
+    # 🟢 LA CORRECCIÓN DE ORO: Añadimos la palabra 'static' antes de int hook_mali_open_bridge()
+    # Esto soluciona la alerta de prototipo ausente que causó la caída en el bloque 1211.
+    sed -i '12i static int hook_mali_open_bridge() {' "$TARGET_INSTANCE"
+    sed -i '13i     int fd = open(\"/dev/mali0\", O_RDWR | O_CLOEXEC);' "$TARGET_INSTANCE"
     sed -i '14i     if (fd >= 0) return fd;' "$TARGET_INSTANCE"
-    sed -i '15i     return open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);' "$TARGET_INSTANCE"
+    sed -i '15i     return open(\"/dev/kgsl-3d0\", O_RDWR | O_CLOEXEC);' "$TARGET_INSTANCE"
     sed -i '16i }' "$TARGET_INSTANCE"
     
     echo "-> Fusión molecular de adrenotools completada con éxito en el metal de Vulkan."
@@ -79,9 +76,9 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dgallium-rusticl=false \
     -Dmesa-clc=system \
     -Dprecomp-compiler=system \
-            -Dvulkan-drivers=panfrost \
-            -Dllvm=disabled \
-            -Dpanfrost-kmds=kbase,panthor
+    -Dvulkan-drivers=panfrost \
+    -Dllvm=disabled \
+    -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
 echo "🚀 3. COMPILANDO CONTROLADOR MONOLÍTICO REAL CON NINJA"
@@ -95,8 +92,7 @@ echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "aarch64-linux-android-strip" -o -name "llvm-strip" | head -n 1)
 echo "-> Herramienta de precisión detectada en: $STRIP_TOOL"
 
-# Aplicamos el recorte quirúrguico sobre el binario gigante para limpiar impurezas
-# manteniendo intactas tus variables dinámicas y tus funciones espejo
+# Aplicamos el recorte quirúrgico sobre el binario gigante para limpiar impurezas
 "$STRIP_TOOL" ./build/src/panfrost/vulkan/libvulkan_panfrost.so
 echo "-> Recorte de peso muerto finalizado con éxito."
 
@@ -151,4 +147,4 @@ cd pack_usr
 tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/
 cd ..
 
-echo ">>> ARSENAL DUAL FUSIONADO FINALIZADA CON ÉXITO ABSOLUTO <<<"
+echo ">>> ARSENAL DUAL FUSIONADO FINALIZADO CON ÉXITO ABSOLUTO <<<"
