@@ -104,7 +104,7 @@ jobs:
         # exigido por las macros internas de Mesa. Esto amarra tu bypass al 100% en la compilación.
         rm -rf subprojects/adrenotools
         mkdir -p subprojects
-        git clone --depth 1 https://github.com/Over-cmd/subprojects/adrenotools
+        git clone --depth 1 https://github.com/Over-cmd/libadrenotools.git subprojects/adrenotools
         echo "-> Inodo biónico de Over-cmd/libadrenotools inyectado y renombrado con éxito."
         
         export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
