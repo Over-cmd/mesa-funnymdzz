@@ -12,14 +12,16 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 EL ENGAÑO DE LA LIBRERÍA ATOMIC:
-# Modificamos en caliente el archivo meson.build en la zona de la linea 1581.
-# Cambiamos 'required : true' o la busqueda estricta por 'required : false' para evitar que
-# Meson colapse al no encontrar libatomic suelta en el Sysroot del NDK de Android.
+# 3. 🟢 EL ESCUDO DE DEPENDENCIAS VIRTUALES (ATOMIC Y DL):
+# Modificamos en caliente el archivo meson.build. Obligamos a Meson a tratar tanto a
+# 'atomic' como a 'dl' como librerías opcionales (required : false). Esto evita el colapso
+# sintáctico en las líneas 1581 y 1772 porque Android ya las incluye integradas en su núcleo.
 if [ -f "meson.build" ]; then
-    echo "-> Aplicando bypass virtual de libatomic en meson.build..."
+    echo "-> Aplicando bypass virtual de dependencias en meson.build..."
     sed -i "s/dependency('atomic')/dependency('atomic', required : false)/g" meson.build
     sed -i "s/find_library('atomic')/find_library('atomic', required : false)/g" meson.build
+    sed -i "s/dependency('dl')/dependency('dl', required : false)/g" meson.build
+    sed -i "s/find_library('dl')/find_library('dl', required : false)/g" meson.build
 fi
 
 # 4. Soldamos el arsenal de variables de adrenotools en panvk_instance.c
@@ -56,7 +58,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Tu matriz exacta combinada con el enlace forzado de las cabeceras X11
+# Tu matriz exacta de optimización compacta acoplada con el enlace forzado de las cabeceras X11
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dc_link_args="-lX11" \
     -Dcpp_link_args="-lX11" \
