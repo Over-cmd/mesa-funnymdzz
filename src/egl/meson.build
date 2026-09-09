@@ -6,8 +6,8 @@ inc_egl = include_directories('.', 'main')
 c_args_for_egl = [asan_c_args]
 cpp_args_for_egl = []
 link_args_for_egl = []
-# Inyección Quirúrgica Over-cmd Limpia sin rutas parásitas largas
-link_args_for_egl += ['-lX11', '-llog']
+# 🟢 ENLACE DIRECTO ABSOLUTO: Pasamos la ruta del archivo físico para romper el candado del Sysroot
+link_args_for_egl += [meson.project_source_root() + '/shims/lib/libX11.so', '-llog']
 link_deps_for_egl = []
 link_for_egl = []
 if with_dri
