@@ -12,20 +12,18 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 EL ESCUDO DE DEPENDENCIAS CON EXPRESIÓN REGULAR COMPLETA:
-# Usamos un comodín elástico (.*) para atrapar CUALQUIER variante de comillas o espacios 
-# donde Meson busque 'atomic' o 'dl' (ej. find_library o dependency) y le inyectamos 
-# coercitivamente 'required : false'. Esto anula los portazos de las líneas 1581 y 1772.
+# 3. 🟢 EL ESCUDO TRIPLE DE DEPENDENCIAS (ATOMIC, DL, RT):
+# Usamos un comodín elástico para atrapar variantes de comillas y espacios en meson.build.
+# Volvemos opcionales (required : false) a atomic, dl y rt de un solo golpe. 
+# Esto anula los portazos de las líneas 1581, 1772 y 1794 porque Android ya las lleva integradas.
 if [ -f "meson.build" ]; then
-    echo "-> Ejecutando desvío universal de dependencias en meson.build..."
-    sed -i "s/\(find_library(['\"]atomic['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-    sed -i "s/\(dependency(['\"]atomic['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-    sed -i "s/\(find_library(['\"]dl['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-    sed -i "s/\(dependency(['\"]dl['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-    
-    # Bypass de fuerza bruta complementario por si vienen en formato limpio simple de asignación
-    sed -i "s/cc.find_library('dl')/cc.find_library('dl', required : false)/g" meson.build
-    sed -i "s/cc.find_library(\"dl\")/cc.find_library('dl', required : false)/g" meson.build
+    echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
+    for lib in "atomic" "dl" "rt"; do
+        sed -i "s/\(find_library(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
+        sed -i "s/\(dependency(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
+        sed -i "s/cc.find_library('${lib}')/cc.find_library('${lib}', required : false)/g" meson.build
+        sed -i "s/cc.find_library(\"${lib}\")/cc.find_library('${lib}', required : false)/g" meson.build
+    done
 fi
 
 # 4. Soldamos el arsenal de variables de adrenotools en panvk_instance.c
