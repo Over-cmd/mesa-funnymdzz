@@ -2,17 +2,34 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO DIRECTO Y REGISTRO DE ADRENOTOOLS"
+echo "🧬 1. EXTERMINIO DE CACHÉ FANTASMA Y ASEGURAMIENTO DE SHIMS"
 echo "========================================================="
-# 1. Saneamos memfd_create para entornos Termux sin alterar código
+# 1. 🟢 EL EXTERMINADOR DE CACHÉ: Borramos la carpeta build por completo
+# Esto obliga a Meson a leer tus meson.build manuales limpios desde cero, 
+# rompiendo el bucle del error viejo que se quedó atascado en la memoria.
+rm -rf build
+
+# 2. Saneamos memfd_create para entornos Termux
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
+# 3. Bypass de pruebas de Gallium con prototipo legal
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 4. 🟢 REDUNDANCIA TOTAL DE LIBX11:
+# Creamos la subcarpeta shims/lib/ y copiamos tu archivo físico real libX11.so 
+# en absolutamente todas las variantes posibles del disco para blindar a Clang++.
+mkdir -p shims/lib
+if [ -f "shims/libX11.so" ]; then
+    echo "-> Duplicando inodo real libX11.so en shims/lib/libX11.so para seguridad doble..."
+    cp -fv shims/libX11.so shims/lib/libX11.so
+elif [ -f "shims/lib/libX11.so" ]; then
+    echo "-> Duplicando inodo real lib/libX11.so en la raíz de shims..."
+    cp -fv shims/lib/libX11.so shims/libX11.so
+fi
+
+# 5. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -23,7 +40,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
