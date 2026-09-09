@@ -47,7 +47,7 @@ libgallium_dri = shared_library(
     inc_gallium_winsys, include_directories('../../frontends/dri'),
   ],
   gnu_symbol_visibility : 'hidden',
-  link_args : [ld_args_build_id, ld_args_gc_sections, gallium_dri_ld_args],
+    link_args : [ld_args_build_id, ld_args_gc_sections, gallium_dri_ld_args, '-llog', '-lsync'],
   link_depends : gallium_dri_link_depends,
   link_with : [
     libmesa, libgalliumvl,
