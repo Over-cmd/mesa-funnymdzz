@@ -5,7 +5,7 @@ echo "========================================================="
 echo "🧬 1. SANEAMIENTO, DESCARGA DE REQUISITOS X11 Y ADRENOTOOLS"
 echo "========================================================="
 # 1. Saneamos memfd_create para entornos Termux
-sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&&& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
+sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
 # 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
@@ -23,12 +23,8 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. 🟢 EL INYECTOR MAESTRO ABSOLUTO EN LA RAÍZ DEL COMPILADOR:
-# Descargamos los paquetes binarios reales de Termux AArch64 y en lugar de usar carpetas locales,
-# copiamos los archivos .so directamente adentro de la carpeta central de librerías del compilador 
-# del NDK (sysroot/usr/lib/aarch64-linux-android/). Al estar ahí en la raíz del sistema, Clang++ 
-# los morderá de forma automática por defecto sin necesidad de pasarle flags -L de texto largo.
-NDK_SYSROOT_BASE_LIB="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android"
+# 4. DESCARGA Y EXTRACCIÓN DE REQUISITOS EN LA CARPETA LOCAL DE SHIMS
+# Descargamos los binarios AArch64 de Termux y los dejamos en shims/lib/ para que Meson los lea directo por archivo
 mkdir -p TEMP_X11
 cd TEMP_X11
 echo "-> Descargando librerías binarias X11 de Termux para AArch64..."
@@ -43,16 +39,15 @@ for deb in *.deb; do
         ar x "$deb"
         tar -xf data.tar.xz 2>/dev/null || true
         find . -name "*.so*" -exec cp -fv {} extracted_libs/ \;
-        rm -rf *.deb data.tar.xz control.tar.xz debian-binary usr data
+        rm -rf *.deb data.tar.xz control.tar.xz debian-binary usr
     fi
 done
 cd ..
 
-# Copiamos de forma coercitiva en la raíz del Linker cruzado del NDK y en su subcarpeta de API 30
-cp -fv TEMP_X11/extracted_libs/*.so* "$NDK_SYSROOT_BASE_LIB/" 2>/dev/null || true
-cp -fv TEMP_X11/extracted_libs/*.so* "$NDK_SYSROOT_BASE_LIB/30/" 2>/dev/null || true
+mkdir -p "$GITHUB_WORKSPACE/shims/lib"
+cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/lib/" 2>/dev/null || true
 rm -rf TEMP_X11
-echo "-> Binarios X11 soldados en la recámara nativa del NDK con éxito."
+echo "-> Binarios X11 listos en el inodo local de shims."
 
 # 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
@@ -88,7 +83,6 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Matriz limpia original libre de flags de rutas relativas largas
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
