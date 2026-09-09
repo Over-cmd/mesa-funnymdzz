@@ -2,19 +2,27 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO DIRECTO Y REGISTRO DE ADRENOTOOLS"
+echo "🧬 1. SANEAMIENTO FORENSE DE SHIMS PARÁSITOS Y ADRENOTOOLS"
 echo "========================================================="
-# 1. Saneamos memfd_create para entornos Termux sin alterar código
+# 1. Purificamos tu carpeta de Shims local del repositorio.
+# Borramos los archivos .so obsoletos que le ocultan al compilador las funciones 
+# modernas del NDK (como sync_merge y __android_log_write). Mantenemos intactas libX11 y libxcb.
+if [ -d "shims" ]; then
+    echo "-> Limpiando librerías parásitas del pool de shims..."
+    rm -f shims/libsync.so shims/liblog.so shims/libdrm.so shims/librt.a shims/librt.so
+fi
+
+# 2. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
+# 3. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
-    echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
+    echo "-> Ejecutando desvío de dependencias en meson.build..."
     for lib in "atomic" "dl" "rt"; do
         sed -i "s/\(find_library(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
         sed -i "s/\(dependency(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
@@ -23,7 +31,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. Soldamos el arsenal de variables de adrenotools en panvk_instance.c
+# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -57,7 +65,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Matriz limpia original inyectando tus shims locales del repositorio en las flags cruzadas
+# Matriz limpia original inyectando tus shims corregidos en las flags cruzadas
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dc_link_args="-L$GITHUB_WORKSPACE/shims" \
     -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims" \
