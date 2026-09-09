@@ -2,31 +2,29 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. ANIQUILACIÓN DE CACHÉ Y REDUNDANCIA TOTAL DE SHIMS"
+echo "🧬 1. FORZADO DE REDUNDANCIA ABSOLUTA DE ARCHIVOS SHIMS"
 echo "========================================================="
-# 1. Pulverizamos cualquier rastro de compilaciones fantasma viejas
-rm -rf build
+# 1. Creamos físicamente ambas rutas de carpetas en el espacio de trabajo del Host
+mkdir -p shims
+mkdir -p shims/lib
 
-# 2. Saneamos memfd_create para entornos Termux sin alterar código
+# 2. Rastreamos dónde está tu archivo real libX11.so original del repositorio 
+# y lo clonamos de forma masiva en todas las variantes para que Clang++ lo vea sí o sí.
+if [ -f "shims/libX11.so" ]; then
+    echo "-> Duplicando de shims/ a shims/lib/..."
+    cp -fv shims/libX11.so shims/lib/libX11.so
+elif [ -f "shims/lib/libX11.so" ]; then
+    echo "-> Duplicando de shims/lib/ a shims/..."
+    cp -fv shims/lib/libX11.so shims/libX11.so
+fi
+
+# 3. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# 3. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
+# 4. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
-
-# 4. 🟢 LA ESTOCADA REPLICANTE (REDUNDANCIA MULTI-RUTA DE LIBX11):
-# Si el archivo está en la raíz de shims/, creamos la subcarpeta lib/ y lo clonamos.
-# Si está en shims/lib/, lo subimos a la raíz de shims/. 
-# Esto garantiza al 100% que Clang++ lo encuentre use la manguera de enlace que use.
-mkdir -p shims/lib
-if [ -f "shims/libX11.so" ]; then
-    echo "-> Replicando inodo real libX11.so de shims/ a shims/lib/..."
-    cp -fv shims/libX11.so shims/lib/libX11.so
-elif [ -f "shims/lib/libX11.so" ]; then
-    echo "-> Replicando inodo real libX11.so de shims/lib/ a shims/..."
-    cp -fv shims/lib/libX11.so shims/libX11.so
-fi
 
 # 5. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
@@ -62,10 +60,10 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
-echo "🔍 AUDITORÍA DE BLINDAJE: ENCONTRANDO LIBX11 EN LOS DOS INODOS"
+echo "🔍 AUDITORÍA DE SEGURIDAD TOTAL: COMPROBANDO AMBOS INODOS"
 echo "========================================================="
-ls -lh shims/libX11.so || true
-ls -lh shims/lib/libX11.so || true
+ls -lh shims/libX11.so || echo "No está en la raíz"
+ls -lh shims/lib/libX11.so || echo "No está en subcarpeta lib"
 echo "========================================================="
 
 echo "========================================================="
@@ -80,7 +78,8 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
+# El setup se fuerza con reconfigure para obligar a Meson a romper cualquier caché fantasma
+meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
