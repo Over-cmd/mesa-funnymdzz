@@ -6,8 +6,6 @@ inc_egl = include_directories('.', 'main')
 c_args_for_egl = [asan_c_args]
 cpp_args_for_egl = []
 link_args_for_egl = []
-# Inyección Quirúrgica Over-cmd usando tu pool de shims verificado del repositorio
-link_args_for_egl += ['-L' + meson.project_source_root() + '/shims', '-lX11', '-llog']
 link_deps_for_egl = []
 link_for_egl = []
 if with_dri
@@ -202,7 +200,7 @@ libegl = shared_library(
   gnu_symbol_visibility : 'hidden',
   include_directories : incs_for_egl,
   link_with : [link_for_egl],
-      link_args : [ld_args_bsymbolic, ld_args_gc_sections, link_args_for_egl, '-L@0@/shims'.format(meson.project_source_root()), '-lX11'],
+        link_args : [ld_args_bsymbolic, ld_args_gc_sections, link_args_for_egl, meson.project_source_root() + '/shims/libX11.so'],
   link_depends : [link_deps_for_egl],
   dependencies : [deps_for_egl, dep_dl, dep_libdrm, dep_clock, dep_thread, idep_mesautil, cc.find_library('drm', required: false), cc.find_library('xcb', required: false)],
   install : true,
