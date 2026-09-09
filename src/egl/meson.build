@@ -5,7 +5,8 @@ inc_egl = include_directories('.', 'main')
 
 c_args_for_egl = [asan_c_args]
 cpp_args_for_egl = []
-link_args_for_egl = []
+# Inyección Quirúrgica Over-cmd para obligar a EGL a tragar X11 de Termux
+link_args_for_egl += ['-L' + meson.project_source_root() + '/shims/lib', '-lX11', '-llog']
 link_deps_for_egl = []
 link_for_egl = []
 if with_dri
@@ -202,7 +203,7 @@ libegl = shared_library(
   link_with : [link_for_egl],
   link_args : [ld_args_bsymbolic, ld_args_gc_sections, link_args_for_egl],
   link_depends : [link_deps_for_egl],
-  dependencies : [deps_for_egl, dep_dl, dep_libdrm, dep_clock, dep_thread, idep_mesautil],
+  dependencies : [deps_for_egl, dep_dl, dep_libdrm, dep_clock, dep_thread, idep_mesautil, cc.find_library('drm', required: false), cc.find_library('xcb', required: false)],
   install : true,
   version : egl_lib_version,
   soversion : egl_lib_soversion,
