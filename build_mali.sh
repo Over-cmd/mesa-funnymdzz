@@ -12,11 +12,32 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 EL PUENTE DE BINARIOS X11 PARA ANDROID (AARCH64):
-# Descargamos los paquetes binarios reales compilados de libx11 y libxcb desde el espejo oficial de Termux.
-# Los extraemos de forma local en nuestra carpeta de shims.
-mkdir -p shims/lib
-echo "-> Descargando librerías binarias X11 de Termux para AArch64..."
+# 3. Restauramos src/egl/meson.build a su estado limpio original de link_args
+if [ -f "src/egl/meson.build" ]; then
+    echo "-> Limpiando filtros locales de egl para inyección directa en el NDK..."
+    sed -i "s|link_args_for_egl = \['-L.*'\]|link_args_for_egl = \[\]|g" src/egl/meson.build
+    # Forzamos la asignación simple directa agregando la directiva de enlace limpia -lX11
+    sed -i "s/link_args_for_egl = \[\]/link_args_for_egl = \['-lX11', '-llog'\]/g" src/egl/meson.build
+fi
+
+# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+if [ -f "meson.build" ]; then
+    echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
+    for lib in "atomic" "dl" "rt"; do
+        sed -i "s/\(find_library(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
+        sed -i "s/\(dependency(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
+        sed -i "s/cc.find_library('${lib}')/cc.find_library('${lib}', required : false)/g" meson.build
+        sed -i "s/cc.find_library(\"${lib}\")/cc.find_library('${lib}', required : false)/g" meson.build
+    done
+fi
+
+# 5. 🟢 EL INYECTOR MAESTRO DE BINARIOS X11 EN EL SYSROOT DEL NDK:
+# Descargamos los paquetes reales de Termux y los metemos a la fuerza adentro de las carpetas 
+# por defecto de busqueda del NDK de Android. Esto anula el error de library not found -lX11 para siempre.
+NDK_SYSROOT_LIB="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30"
+mkdir -p TEMP_X11
+cd TEMP_X11
+echo "-> Extrayendo binarios AArch64 de Termux en el NDK del Host..."
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
@@ -25,32 +46,14 @@ wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 for deb in *.deb; do
     if [ -f "$deb" ]; then
         ar x "$deb"
-        tar -xf data.tar.xz ./data/data/com.termux/files/usr/lib/ 2>/dev/null || tar -xf data.tar.xz 2>/dev/null
-        find . -name "*.so*" -exec cp -fv {} shims/lib/ \;
-        rm -rf  *.deb data.tar.xz control.tar.xz debian-binary usr data
+        tar -xf data.tar.xz 2>/dev/null || true
+        find . -name "*.so*" -exec cp -fv {} "$NDK_SYSROOT_LIB/" \;
+        rm -rf *.deb data.tar.xz control.tar.xz debian-binary usr
     fi
 done
-echo "-> Pool de binarios cruzados X11 estructurado en shims/lib/."
-
-# 4. 🟢 LA ESTOCADA QUIRÚRGICA CONFIRMADA EN SRC/EGL/MESON.BUILD:
-# Modificamos directamente el archivo local de libegl. Buscamos link_args_for_egl 
-# e inyectamos el flag de ruta -L apuntando a nuestros shims y la orden de enlace -lX11.
-# Esto confina el hack de X11 de forma exclusiva dentro de libEGL.so sin estorbar a libgallium o libdrm.
-if [ -f "src/egl/meson.build" ]; then
-    echo "-> Inyectando link_args de precisión local en las mangueras de libegl..."
-    sed -i "s|link_args_for_egl = \[\]|link_args_for_egl = \['-L$GITHUB_WORKSPACE/shims/lib', '-lX11', '-llog'\]|g" src/egl/meson.build
-fi
-
-# 5. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
-if [ -f "meson.build" ]; then
-    echo "-> Ejecutando desvío de dependencias en meson.build..."
-    for lib in "atomic" "dl" "rt"; do
-        sed -i "s/\(find_library(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-        sed -i "s/\(dependency(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-        sed -i "s/cc.find_library('${lib}')/cc.find_library('${lib}', required : false)/g" meson.build
-        sed -i "s/cc.find_library(\"${lib}\")/cc.find_library('${lib}', required : false)/g" meson.build
-    done
-fi
+cd ..
+rm -rf TEMP_X11
+echo "-> Sysroot del NDK modificado con éxito total."
 
 # 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
@@ -86,7 +89,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Matriz limpia original libre de argumentos link parásitos que cegaban al NDK
+# Matriz limpia original sin link_args sueltos en Meson
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
