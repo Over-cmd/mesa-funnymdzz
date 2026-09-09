@@ -57,7 +57,10 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
+# Matriz limpia original inyectando tus shims corregidos en las flags cruzadas
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
+    -Dc_link_args="-L$GITHUB_WORKSPACE/shims" \
+    -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
