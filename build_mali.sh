@@ -12,13 +12,13 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 EL PARCHE QUIRÚRGICO DE EGL X11:
-# En lugar de usar link_args globales que rompen a Zlib en el bloque 125, inyectamos el flag 
-# '-lX11' de forma exclusiva en el archivo de construcción local de EGL para solucionar
-# los símbolos XOpenDisplay sin molestar a los otros subproyectos del build.
+# 3. 🟢 EL PARCHE QUIRÚRGICO ABSOLUTO PARA EGL X11:
+# Modificamos directamente el bloque shared_library de EGL en src/egl/meson.build.
+# Añadimos link_args: ['-lX11'] de forma nativa e interna. Esto fuerza a ld.lld a arrastrar
+# los símbolos XOpenDisplay y XCloseDisplay sin molestar a Zlib en el bloque 125.
 if [ -f "src/egl/meson.build" ]; then
-    echo "-> Soldando flag -lX11 de precisión en las mangueras locales de EGL..."
-    sed -i "s/dependencies : \[/dependencies : \[dependency('x11', required: false), /g" src/egl/meson.build
+    echo "-> Soldando link_args -lX11 directamente en la raíz de la librería EGL..."
+    sed -i "s/shared_library('EGL',/shared_library('EGL', link_args : ['-lX11'],/g" src/egl/meson.build
 fi
 
 # 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
