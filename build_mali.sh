@@ -79,8 +79,9 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# 🟢 JUGADA MAESTRA EXTRA: Activamos vulkan-layers, pipelines ampliados y forzamos
-# la compilación de extensiones dinámicas para inflar el driver hasta los 253 símbolos.
+# 🟢 CONFIGURACIÓN MAESTRA DE 253 SETTINGS EN MEMORIA:
+# Mantenemos fijas de forma obligatoria las capas base, los pipelines dinámicos 
+# y la directiva de módulos del kernel kbase para inflar el panel del driver al 100%.
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -119,7 +120,7 @@ STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch6
 
 TARGET_VULKAN="build/src/panfrost/vulkan/libvulkan_panfrost.so"
 if [ -f "$TARGET_VULKAN" ]; then
-    echo "-> Aplicando strip inteligente para no romper la suite de 253 variables..."
+    echo "-> Aplicando strip inteligente para conservar el bloque masivo de variables..."
     "$STRIP_TOOL" --strip-unneeded "$TARGET_VULKAN" || "$STRIP_TOOL" "$TARGET_VULKAN"
 fi
 
@@ -170,8 +171,7 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 }
 EOF
 
-# 🟢 AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-# Esto elimina el cartel de "Version: Unknown" y le da identidad al driver
+# AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
 echo "Mesa Over-cmd v26.3-Bifrost" > ./pack_flat/version.txt
 echo "Mesa Over-cmd v26.3-Bifrost" > ./pack_usr/version.txt
 
