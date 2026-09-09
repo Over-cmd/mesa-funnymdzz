@@ -2,7 +2,7 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO DIRECTO Y FORJADO BIÓNICO DE LIBX11"
+echo "🧬 1. SANEAMIENTO DIRECTO Y REGISTRO DE ADRENOTOOLS"
 echo "========================================================="
 # 1. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -12,27 +12,7 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 EL FORJADO INMUTABLE DEL SHIM:
-# Creamos un archivo .c local con los símbolos exactos de ventanas que exige libEGL.so.
-# Lo compilamos de forma cruzada para AArch64 usando el Clang oficial de Android del NDK.
-# Esto garantiza al 100% la existencia física de shims/lib/libX11.so en el disco duro del Host.
-mkdir -p shims/lib
-
-cat << 'EOF' > dummy_x11.c
-void* XOpenDisplay(const char* display_name) { return 0; }
-int XCloseDisplay(void* display) { return 0; }
-void* XCreateIC() { return 0; }
-void* XOpenIM() { return 0; }
-EOF
-
-# Localizamos el Clang de compilación cruzada oficial de Android target 30 en el NDK
-CC_ANDROID="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang"
-
-echo "-> Horneando archivo libX11.so para arquitectura cruzada Android..."
-"$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/lib/libX11.so
-rm -f dummy_x11.c
-
-# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -43,7 +23,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 4. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -66,12 +46,6 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
-echo "🔍 AUDITORÍA PRE-BUILD: VERIFICANDO ARCHIVO RECIÉN HORNEADO"
-echo "========================================================="
-ls -lh shims/lib/libX11.so
-echo "========================================================="
-
-echo "========================================================="
 echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
@@ -84,8 +58,6 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 envsubst < android.toml > android-cross.txt
 
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
-    -Dc_link_args="-L$GITHUB_WORKSPACE/shims" \
-    -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
