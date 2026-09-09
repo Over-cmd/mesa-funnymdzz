@@ -2,14 +2,20 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO FORENSE DE SHIMS PARÁSITOS Y ADRENOTOOLS"
+echo "🧬 1. SANEAMIENTO MULTI-SYSROOT Y CLONACIÓN DE LOGS"
 echo "========================================================="
-# 1. Purificamos tu carpeta de Shims local del repositorio.
-# Borramos los archivos .so obsoletos que le ocultan al compilador las funciones 
-# modernas del NDK (como sync_merge y __android_log_write). Mantenemos intactas libX11 y libxcb.
-if [ -d "shims" ]; then
-    echo "-> Limpiando librerías parásitas del pool de shims..."
-    rm -f shims/libsync.so shims/liblog.so shims/libdrm.so shims/librt.a shims/librt.so
+# 1. 🟢 CLONACIÓN EN CALIENTE DEL NDK: 
+# Buscamos los archivos binarios modernos y legítimos de libdrm.so y libsync.so 
+# dentro del Sysroot oficial del NDK de Android de Google del Host y los copiamos 
+# encima de tu carpeta de shims local. Esto actualiza sus tablas de símbolos internos, 
+# solucionando de golpe el 'unable to find library -ldrm' y las funciones muertas.
+NDK_AARCH64_LIBS="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30"
+
+if [ -d "shims" ] && [ -d "$NDK_AARCH64_LIBS" ]; then
+    echo "-> Sobrescribiendo shims viejos con binarios modernos del NDK de Google..."
+    cp -fv "$NDK_AARCH64_LIBS"/libdrm.so shims/ 2>/dev/null || true
+    cp -fv "$NDK_AARCH64_LIBS"/libsync.so shims/ 2>/dev/null || true
+    cp -fv "$NDK_AARCH64_LIBS"/liblog.so shims/ 2>/dev/null || true
 fi
 
 # 2. Saneamos memfd_create para entornos Termux sin alterar código
@@ -65,7 +71,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Matriz limpia original inyectando tus shims corregidos en las flags cruzadas
+# Matriz limpia inyectando la ruta de shims saneada con los binarios del NDK
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dc_link_args="-L$GITHUB_WORKSPACE/shims" \
     -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims" \
