@@ -47,26 +47,28 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 🟢 INYECCIÓN ATÓMICA PUNTO CERO EN VKCREATEINSTANCE:
+# En lugar de usar constructores flotantes que Android bloquea, soldamos el arsenal 
+# de 7 variables de adrenotools justo en la entrada real de la función panvk_CreateInstance.
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
-    echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
-    sed -i '1i #include <stdlib.h>' "$TARGET_INSTANCE"
-    sed -i '2i #include <fcntl.h>' "$TARGET_INSTANCE"
-    sed -i '3i #include <unistd.h>' "$TARGET_INSTANCE"
+    echo "-> Aplicando cirugía de Punto Cero en: $TARGET_INSTANCE"
+    # Quitamos parches viejos si existieran
+    sed -i '/panvk_adrenotools_mali_init/d' "$TARGET_INSTANCE"
     
-    sed -i '4i __attribute__((constructor)) static void panvk_adrenotools_mali_init() {' "$TARGET_INSTANCE"
-    sed -i '5i     setenv("PAN_MESA_DEBUG", "kbase", 1);' "$TARGET_INSTANCE"
-    sed -i '6i     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);' "$TARGET_INSTANCE"
-    sed -i '7i     setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);' "$TARGET_INSTANCE"
-    sed -i '8i     setenv("ADRENOTOOLS_DRIVER_CUSTOM", "1", 1);' "$TARGET_INSTANCE"
-    sed -i '9i     setenv("ADRENOTOOLS_DRIVER_FILE_REDIRECT", "1", 1);' "$TARGET_INSTANCE"
-    sed -i '10i    setenv("ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT", "1", 1);' "$TARGET_INSTANCE"
-    sed -i '11i    setenv("ADRENOTOOLS_DRIVER_NAME", "panfrost", 1);' "$TARGET_INSTANCE"
-    sed -i '12i    setenv("ADRENOTOOLS_DRIVER_PATH", "1", 1);' "$TARGET_INSTANCE"
-    sed -i '13i    setenv("ADRENOTOOLS_HOOKS_PATH", "1", 1);' "$TARGET_INSTANCE"
-    sed -i '14i    setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);' "$TARGET_INSTANCE"
-    sed -i '15i }' "$TARGET_INSTANCE"
+    # Buscamos la apertura de panvk_CreateInstance e inyectamos las mangueras en el primer renglón
+    sed -i '/panvk_CreateInstance(/,/{/ { /{/a \
+        setenv("PAN_MESA_DEBUG", "kbase", 1); \
+        setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
+        setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); \
+        setenv("ADRENOTOOLS_DRIVER_CUSTOM", "1", 1); \
+        setenv("ADRENOTOOLS_DRIVER_FILE_REDIRECT", "1", 1); \
+        setenv("ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT", "1", 1); \
+        setenv("ADRENOTOOLS_DRIVER_NAME", "panfrost", 1); \
+        setenv("ADRENOTOOLS_DRIVER_PATH", "1", 1); \
+        setenv("ADRENOTOOLS_HOOKS_PATH", "1", 1); \
+        setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);
+    }' "$TARGET_INSTANCE"
 fi
 
 echo "========================================================="
@@ -110,12 +112,6 @@ echo "========================================================="
 echo "🚀 3. COMPILANDO CON NINJA NATIVO"
 echo "========================================================="
 meson compile -C build
-
-echo "========================================================="
-echo "🔍 🕵️‍♂️ PASO EXTRA: ESCÁNER FORENSE ABSOLUTO DE ARCHIVOS .SO"
-echo "========================================================="
-find build/ -name "*.so*" -exec ls -lh {} \;
-echo "========================================================="
 
 echo "========================================================="
 echo "📦 4. PURIFICACIÓN Y ENMALLADO DE SEGURIDAD REDUNDANTE"
@@ -164,7 +160,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-# 🟢 CONFIGURACIÓN DEL ARCHIVO MANIFEST CON SU NOMBRE LARGO EXACTO SOLICITADO
+# El archivo ICD de Android apuntará de forma exacta a libvulkan_wrapper.so
 cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
