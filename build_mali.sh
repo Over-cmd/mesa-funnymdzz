@@ -12,13 +12,7 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. Forzamos la inyección limpia del flag de enlace X11 en EGL
-if [ -f "src/egl/meson.build" ]; then
-    echo "-> Configurando link_args de precisión en las mangueras de libegl..."
-    sed -i "s/link_args_for_egl = \[\]/link_args_for_egl = \['-lX11', '-llog'\]/g" src/egl/meson.build
-fi
-
-# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -29,9 +23,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 5. 🟢 EL INYECTOR QUIRÚRGICO DE BINARIOS X11 EN LA CARPETA SHIMS REAL:
-# Descargamos los paquetes binarios de Termux y los sembramos directamente adentro 
-# del inodo local de Shims que Clang++ lee de forma nativa a través del flag -L de tu log.
+# 4. EL INYECTOR QUIRÚRGICO DE BINARIOS X11 EN LA CARPETA SHIMS REAL
 mkdir -p TEMP_X11
 cd TEMP_X11
 echo "-> Descargando librerías binarias X11 de Termux para AArch64..."
@@ -46,20 +38,18 @@ for deb in *.deb; do
         ar x "$deb"
         tar -xf data.tar.xz 2>/dev/null || true
         find . -name "*.so*" -exec cp -fv {} extracted_libs/ \;
-        rm -rf *.deb data.tar.xz control.tar.xz debian-binary usr
+        rm -rf *.deb data.tar.xz control.tar.xz debian-binary usr data
     fi
 done
 cd ..
 
-# Sembramos de forma redundante tanto en shims/ como en shims/lib/ para blindar el buscador
-mkdir -p "$GITHUB_WORKSPACE/shims"
+# Sembramos los binarios exclusivamente en shims/lib para el enlazador de EGL
 mkdir -p "$GITHUB_WORKSPACE/shims/lib"
-cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/" 2>/dev/null || true
 cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/lib/" 2>/dev/null || true
 rm -rf TEMP_X11
-echo "-> Carpeta de Shims local del espacio de trabajo inyectada con éxito total."
+echo "-> Carpeta de Shims local inyectada."
 
-# 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
