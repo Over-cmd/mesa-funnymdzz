@@ -23,31 +23,42 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. DESCARGA Y EXTRACCIÓN DE REQUISITOS EN LA CARPETA LOCAL DE SHIMS
-# Descargamos los binarios AArch64 de Termux y los dejamos en shims/lib/ para que Meson los lea directo por archivo
+# 4. 🟢 POOL DE DESCARGA INMUTABLE DE BINARIOS X11 (AARCH64):
+# Para evitar que los enlaces mutables de Termux den error 404, usamos los espejos estables 
+# de Ubuntu Ports para AArch64. Extraemos libx11.so directo al inodo shims/lib/.
+mkdir -p "$GITHUB_WORKSPACE/shims/lib"
 mkdir -p TEMP_X11
 cd TEMP_X11
-echo "-> Descargando librerías binarias X11 de Termux para AArch64..."
-wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
-wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
-wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
-wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 
-mkdir -p extracted_libs
+echo "-> Extrayendo binarios estables X11 de arquitectura cruzada AArch64..."
+wget -q http://ubuntu.com
+wget -q http://ubuntu.com
+wget -q http://ubuntu.com
+wget -q http://ubuntu.com
+
 for deb in *.deb; do
     if [ -f "$deb" ]; then
         ar x "$deb"
-        tar -xf data.tar.xz 2>/dev/null || true
-        find . -name "*.so*" -exec cp -fv {} extracted_libs/ \;
-        rm -rf *.deb data.tar.xz control.tar.xz debian-binary usr
+        tar -xf data.tar.xz 2>/dev/null || tar -xf data.tar.zst 2>/dev/null || true
+        find . -name "*.so*" -exec cp -fv {} "$GITHUB_WORKSPACE/shims/lib/" \;
+        rm -rf *.deb data.tar.* control.tar.* debian-binary usr
     fi
 done
 cd ..
-
-mkdir -p "$GITHUB_WORKSPACE/shims/lib"
-cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/lib/" 2>/dev/null || true
 rm -rf TEMP_X11
-echo "-> Binarios X11 listos en el inodo local de shims."
+
+# 🟢 AUDITORÍA DE SEGURIDAD FÍSICA: Forzamos la creación del enlace simbólico 
+# por si el paquete descargado guardó el archivo como libX11.so.6 en vez de libX11.so
+cd "$GITHUB_WORKSPACE/shims/lib"
+ln -sf libX11.so.* libX11.so || true
+ln -sf libxcb.so.* libxcb.so || true
+cd "$GITHUB_WORKSPACE"
+
+echo "========================================================="
+echo "🔍 AUDITORÍA PRE-BUILD: VERIFICANDO EXISTENCIA DE LIBX11"
+echo "========================================================="
+ls -lh "$GITHUB_WORKSPACE/shims/lib/libX11.so"
+echo "========================================================="
 
 # 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
