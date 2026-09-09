@@ -112,41 +112,45 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN DE TONELAJE DE ALTO REQUISITO Y ENSAMBLAJE"
+echo "🔍 🕵️‍♂️ PASO EXTRA: ESCÁNER FORENSE ABSOLUTO DE ARCHIVOS .SO"
 echo "========================================================="
-# 🟢 EL LIMPIADOR REDUNDANTE BLINDADO:
-# Como tu binario pesa 115 MB en bruto, usamos la suite llvm-strip oficial del NDK 
-# con flags restrictivos para rebanar el excedente sin corromper el mapa binario.
+find build/ -name "*.so*" -exec ls -lh {} \;
+echo "========================================================="
+
+echo "========================================================="
+echo "📦 4. PURIFICACIÓN Y ENMALLADO DE SEGURIDAD REDUNDANTE"
+echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
 TARGET_VULKAN="build/src/panfrost/vulkan/libvulkan_panfrost.so"
 if [ -f "$TARGET_VULKAN" ]; then
-    echo "-> Aplicando strip de precisión quirúrgica sobre el gigante de 115 MB..."
+    echo "-> Aplicando strip de precisión quirúrgica sobre el binario gigante..."
     "$STRIP_TOOL" --strip-unneeded "$TARGET_VULKAN" || "$STRIP_TOOL" "$TARGET_VULKAN"
 fi
 
 find build/ -name "libEGL.so*" -exec "$STRIP_TOOL" --strip-unneeded {} \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec "$STRIP_TOOL" --strip-unneeded {} \; 2>/dev/null || true
 
-# Generamos las carpetas de alojamiento
+# Conservamos tu empaquetado estructurado original de 3 ramas
 mkdir -p ./pack_flat
 mkdir -p ./pack_usr/usr/lib
 mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 mkdir -p ./pack_usr/vendor/lib64/hw
 mkdir -p ./pack_usr/system/lib64
 
-# Sincronizamos las firmas de nombres de archivos físicos con sus manifiestos JSON
+# Guardamos la librería física unificada de Vulkan como libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_wrapper.so
 
-cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_panfrost.so
-cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_panfrost.so
-cp -fv "$TARGET_VULKAN" ./pack_usr/system/lib64/libvulkan_panfrost.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_wrapper.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_wrapper.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/system/lib64/libvulkan_wrapper.so
 
-# Copiamos los binarios de OpenGL mapeados
+# Copiamos los binarios complementarios de OpenGL a todas las rutas
 find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libEGL.so \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libGL.so \; 2>/dev/null || true
 find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
+# METADATOS JSON SINCRONIZADOS AL NOMBRE UNIFICADO:
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
@@ -160,11 +164,12 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
+# 🟢 CONFIGURACIÓN DEL ARCHIVO MANIFEST CON SU NOMBRE LARGO EXACTO SOLICITADO
 cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "library_path": "libvulkan_panfrost.so",
+    "library_path": "libvulkan_wrapper.so",
     "api_version": "1.3.289"
   }
 }
@@ -173,7 +178,7 @@ EOF
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-# Comprimimos el tanque gráfico robustecido
+# Ensamblamos tus estructuras duales definitivas
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
