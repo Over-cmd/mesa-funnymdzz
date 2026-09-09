@@ -2,7 +2,7 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO Y REGISTRO DE ADRENOTOOLS EN MESA"
+echo "🧬 1. SANEAMIENTO, DESCARGA DE REQUISITOS X11 Y ADRENOTOOLS"
 echo "========================================================="
 # 1. Saneamos memfd_create para entornos Termux
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -12,12 +12,9 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 LA ESTOCADA QUIRÚRGICA CONFIRMADA EN SRC/EGL/MESON.BUILD:
-# Usamos sed para buscar la inicialización de link_args_for_egl que auditamos en tu log
-# e inyectamos de forma obligatoria el flag de enlace -lX11 y -llog en caliente.
-# Esto fuerza a ld.lld a soldar las ventanas de Termux-X11 en libEGL.so de forma inapelable.
+# 3. Inyectamos los link_args forzados en el archivo local que auditamos
 if [ -f "src/egl/meson.build" ]; then
-    echo "-> Inyectando link_args de precisión en las mangueras de libegl..."
+    echo "-> Soldando link_args -lX11 directamente en la raíz de la librería EGL..."
     sed -i "s/link_args_for_egl = \[\]/link_args_for_egl = \['-lX11', '-llog'\]/g" src/egl/meson.build
 fi
 
@@ -32,7 +29,29 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 5. 🟢 EL PUENTE DE BINARIOS X11 PARA ANDROID (AARCH64):
+# Descargamos los paquetes binarios reales compilados de libx11 y libxcb desde el espejo oficial de Termux.
+# Los extraemos de forma local en nuestra carpeta de shims y forzamos a que el buscador -L los lea,
+# solucionando de golpe el error de 'unable to find library -lX11' en la compilación cruzada.
+mkdir -p shims/lib
+echo "-> Descargando librerías binarias X11 de Termux para AArch64..."
+wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
+wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
+wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
+wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
+
+# Extraemos los debs y movemos los archivos .so reales al pool de Shims
+for deb in *.deb; do
+    if [ -f "$deb" ]; then
+        ar x "$deb"
+        tar -xf data.tar.xz ./data/data/com.termux/files/usr/lib/ 2>/dev/null || tar -xf data.tar.xz 2>/dev/null
+        find . -name "*.so*" -exec cp -fv {} shims/lib/ \;
+        rm -rf  *.deb data.tar.xz control.tar.xz debian-binary usr data
+    fi
+done
+echo "-> Pool de binarios cruzados X11 estructurado en shims/lib/."
+
+# 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -66,8 +85,10 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Tu matriz limpia de alto rendimiento para tu GPU Mali G52
+# Forzamos a que Meson añada nuestra carpeta de shims/lib en la ruta de busqueda del linker cruzado
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
+    -Dc_link_args="-L$GITHUB_WORKSPACE/shims/lib" \
+    -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims/lib" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
