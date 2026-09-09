@@ -2,7 +2,7 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO DIRECTO Y REGISTRO DE ADRENOTOOLS"
+echo "🧬 1. SANEAMIENTO DIRECTO Y ASEGURAMIENTO DE SHIMS"
 echo "========================================================="
 # 1. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -12,7 +12,17 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 3. 🟢 EL ASEGURAMIENTO DEL INODO: 
+# Forzamos la creación de la subcarpeta shims/lib/ y copiamos de forma redundante 
+# tu archivo real libX11.so en ambas rutas del espacio de trabajo para asegurar que 
+# Clang++ lo encuentre de forma física inapelable en la línea 233.
+mkdir -p shims/lib
+if [ -f "shims/libX11.so" ]; then
+    echo "-> Asegurando inodo físico libX11.so en shims/lib/..."
+    cp -fv shims/libX11.so shims/lib/libX11.so
+fi
+
+# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -23,7 +33,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -46,6 +56,12 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
+echo "🔍 AUDITORÍA PRE-BUILD: VERIFICANDO ARCHIVO EN LA CARPETA REAL"
+echo "========================================================="
+ls -lh shims/lib/libX11.so
+echo "========================================================="
+
+echo "========================================================="
 echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
@@ -57,7 +73,6 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Matriz limpia original inyectando tus shims corregidos en las flags cruzadas
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dc_link_args="-L$GITHUB_WORKSPACE/shims" \
     -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims" \
