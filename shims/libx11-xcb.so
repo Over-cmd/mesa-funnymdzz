@@ -1,1 +1,2 @@
-libX11-xcb.so
+libx11-xcb.so
+libx11.so
