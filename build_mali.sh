@@ -2,33 +2,19 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO MULTI-SYSROOT Y CLONACIÓN DE LOGS"
+echo "🧬 1. SANEAMIENTO DIRECTO Y REGISTRO DE ADRENOTOOLS"
 echo "========================================================="
-# 1. 🟢 CLONACIÓN EN CALIENTE DEL NDK: 
-# Buscamos los archivos binarios modernos y legítimos de libdrm.so y libsync.so 
-# dentro del Sysroot oficial del NDK de Android de Google del Host y los copiamos 
-# encima de tu carpeta de shims local. Esto actualiza sus tablas de símbolos internos, 
-# solucionando de golpe el 'unable to find library -ldrm' y las funciones muertas.
-NDK_AARCH64_LIBS="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30"
-
-if [ -d "shims" ] && [ -d "$NDK_AARCH64_LIBS" ]; then
-    echo "-> Sobrescribiendo shims viejos con binarios modernos del NDK de Google..."
-    cp -fv "$NDK_AARCH64_LIBS"/libdrm.so shims/ 2>/dev/null || true
-    cp -fv "$NDK_AARCH64_LIBS"/libsync.so shims/ 2>/dev/null || true
-    cp -fv "$NDK_AARCH64_LIBS"/liblog.so shims/ 2>/dev/null || true
-fi
-
-# 2. Saneamos memfd_create para entornos Termux sin alterar código
+# 1. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# 3. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
+# 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
-    echo "-> Ejecutando desvío de dependencias en meson.build..."
+    echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
         sed -i "s/\(find_library(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
         sed -i "s/\(dependency(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
@@ -37,7 +23,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 4. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -71,10 +57,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Matriz limpia inyectando la ruta de shims saneada con los binarios del NDK
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
-    -Dc_link_args="-L$GITHUB_WORKSPACE/shims" \
-    -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
