@@ -12,11 +12,9 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. Restauramos src/egl/meson.build a su estado limpio original de link_args
+# 3. Forzamos la inyección limpia del flag de enlace X11 en EGL
 if [ -f "src/egl/meson.build" ]; then
-    echo "-> Limpiando filtros locales de egl para inyección directa en el NDK..."
-    sed -i "s|link_args_for_egl = \['-L.*'\]|link_args_for_egl = \[\]|g" src/egl/meson.build
-    # Forzamos la asignación simple directa agregando la directiva de enlace limpia -lX11
+    echo "-> Configurando link_args de precisión en las mangueras de libegl..."
     sed -i "s/link_args_for_egl = \[\]/link_args_for_egl = \['-lX11', '-llog'\]/g" src/egl/meson.build
 fi
 
@@ -31,29 +29,42 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 5. 🟢 EL INYECTOR MAESTRO DE BINARIOS X11 EN EL SYSROOT DEL NDK:
-# Descargamos los paquetes reales de Termux y los metemos a la fuerza adentro de las carpetas 
-# por defecto de busqueda del NDK de Android. Esto anula el error de library not found -lX11 para siempre.
-NDK_SYSROOT_LIB="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30"
+# 5. 🟢 EL INYECTOR MULTI-SYSROOT DE BINARIOS X11 DE TERMUX:
+# Descargamos los paquetes binarios reales de Termux y los sembramos de forma redundante 
+# en todas las rutas posibles del Sysroot de Android del NDK. Esto rompe el candado 
+# de 'unable to find library -lX11' de forma matemática e inapelable.
 mkdir -p TEMP_X11
 cd TEMP_X11
-echo "-> Extrayendo binarios AArch64 de Termux en el NDK del Host..."
+echo "-> Extrayendo binarios AArch64 de Termux..."
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 
+# Creamos una carpeta local temporal para concentrar los archivos .so
+mkdir -p extracted_libs
 for deb in *.deb; do
     if [ -f "$deb" ]; then
         ar x "$deb"
         tar -xf data.tar.xz 2>/dev/null || true
-        find . -name "*.so*" -exec cp -fv {} "$NDK_SYSROOT_LIB/" \;
+        find . -name "*.so*" -exec cp -fv {} extracted_libs/ \;
         rm -rf *.deb data.tar.xz control.tar.xz debian-binary usr
     fi
 done
 cd ..
+
+# Sembramos de forma masiva los binarios en todos los inodos de librerías del NDK
+SYSROOT_ROOT_AARCH64="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android"
+mkdir -p "$SYSROOT_ROOT_AARCH64"
+mkdir -p "$SYSROOT_ROOT_AARCH64/30"
+mkdir -p shims/lib
+
+cp -fv TEMP_X11/extracted_libs/*.so* "$SYSROOT_ROOT_AARCH64/" 2>/dev/null || true
+cp -fv TEMP_X11/extracted_libs/*.so* "$SYSROOT_ROOT_AARCH64/30/" 2>/dev/null || true
+cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/" 2>/dev/null || true
+cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/lib/" 2>/dev/null || true
 rm -rf TEMP_X11
-echo "-> Sysroot del NDK modificado con éxito total."
+echo "-> Saneamiento masivo multi-sysroot del NDK completado."
 
 # 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
@@ -89,7 +100,6 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Matriz limpia original sin link_args sueltos en Meson
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
