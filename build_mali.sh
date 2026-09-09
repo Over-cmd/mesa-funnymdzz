@@ -2,9 +2,9 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO, DESCARGA DE REQUISITOS X11 Y ADRENOTOOLS"
+echo "🧬 1. SANEAMIENTO DIRECTO Y REGISTRO DE ADRENOTOOLS"
 echo "========================================================="
-# 1. Saneamos memfd_create para entornos Termux
+# 1. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
 # 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
@@ -23,44 +23,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. 🟢 POOL DE DESCARGA INMUTABLE DE BINARIOS X11 (AARCH64):
-# Para evitar que los enlaces mutables de Termux den error 404, usamos los espejos estables 
-# de Ubuntu Ports para AArch64. Extraemos libx11.so directo al inodo shims/lib/.
-mkdir -p "$GITHUB_WORKSPACE/shims/lib"
-mkdir -p TEMP_X11
-cd TEMP_X11
-
-echo "-> Extrayendo binarios estables X11 de arquitectura cruzada AArch64..."
-wget -q http://ubuntu.com
-wget -q http://ubuntu.com
-wget -q http://ubuntu.com
-wget -q http://ubuntu.com
-
-for deb in *.deb; do
-    if [ -f "$deb" ]; then
-        ar x "$deb"
-        tar -xf data.tar.xz 2>/dev/null || tar -xf data.tar.zst 2>/dev/null || true
-        find . -name "*.so*" -exec cp -fv {} "$GITHUB_WORKSPACE/shims/lib/" \;
-        rm -rf *.deb data.tar.* control.tar.* debian-binary usr
-    fi
-done
-cd ..
-rm -rf TEMP_X11
-
-# 🟢 AUDITORÍA DE SEGURIDAD FÍSICA: Forzamos la creación del enlace simbólico 
-# por si el paquete descargado guardó el archivo como libX11.so.6 en vez de libX11.so
-cd "$GITHUB_WORKSPACE/shims/lib"
-ln -sf libX11.so.* libX11.so || true
-ln -sf libxcb.so.* libxcb.so || true
-cd "$GITHUB_WORKSPACE"
-
-echo "========================================================="
-echo "🔍 AUDITORÍA PRE-BUILD: VERIFICANDO EXISTENCIA DE LIBX11"
-echo "========================================================="
-ls -lh "$GITHUB_WORKSPACE/shims/lib/libX11.so"
-echo "========================================================="
-
-# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 4. Soldamos el arsenal de variables de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -94,7 +57,10 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
+# Matriz limpia original inyectando tus shims locales del repositorio en las flags cruzadas
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
+    -Dc_link_args="-L$GITHUB_WORKSPACE/shims" \
+    -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
