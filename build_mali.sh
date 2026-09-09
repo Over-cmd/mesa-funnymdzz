@@ -12,7 +12,16 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 3. 🟢 LA ESTOCADA QUIRÚRGICA CONFIRMADA EN SRC/EGL/MESON.BUILD:
+# Usamos sed para buscar la inicialización de link_args_for_egl que auditamos en tu log
+# e inyectamos de forma obligatoria el flag de enlace -lX11 y -llog en caliente.
+# Esto fuerza a ld.lld a soldar las ventanas de Termux-X11 en libEGL.so de forma inapelable.
+if [ -f "src/egl/meson.build" ]; then
+    echo "-> Inyectando link_args de precisión en las mangueras de libegl..."
+    sed -i "s/link_args_for_egl = \[\]/link_args_for_egl = \['-lX11', '-llog'\]/g" src/egl/meson.build
+fi
+
+# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -23,7 +32,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -46,7 +55,7 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
-echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO E INYECCIÓN TOML"
+echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
 export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -55,19 +64,9 @@ export PKG_CONFIG_FOR_BUILD="/usr/bin/pkg-config"
 export PKG_CONFIG_PATH_FOR_BUILD="/usr/lib/x86_64-linux-gnu/pkgconfig"
 export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgconfig"
 
-# Generamos el archivo de configuración cruzada base desde tu plantilla
 envsubst < android.toml > android-cross.txt
 
-# 🟢 LA ESTOCADA DEL ARCHIVO CRUZADO:
-# Usamos sed para buscar la etiqueta [properties] adentro del archivo cruzado real 
-# e inyectamos directamente las directivas de enlace forzadas c_link_args y cpp_link_args.
-# Esto obliga al NDK de Android a arrastrar la librería física de X11 (-lX11) de forma inapelable.
-if [ -f "android-cross.txt" ]; then
-    echo "-> Inyectando directivas de enlace forzado X11 en android-cross.txt..."
-    sed -i "/\[properties\]/a c_link_args = ['-lX11', '-llog']\ncpp_link_args = ['-lX11', '-llog']" android-cross.txt
-fi
-
-# Lanzamos el setup con el archivo cruzado ya inyectado con tus flags exactas
+# Tu matriz limpia de alto rendimiento para tu GPU Mali G52
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
