@@ -46,7 +46,7 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
-echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
+echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO E INYECCIÓN TOML"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
 export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -55,9 +55,19 @@ export PKG_CONFIG_FOR_BUILD="/usr/bin/pkg-config"
 export PKG_CONFIG_PATH_FOR_BUILD="/usr/lib/x86_64-linux-gnu/pkgconfig"
 export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgconfig"
 
+# Generamos el archivo de configuración cruzada base desde tu plantilla
 envsubst < android.toml > android-cross.txt
 
-# Configuramos el entorno base limpio
+# 🟢 LA ESTOCADA DEL ARCHIVO CRUZADO:
+# Usamos sed para buscar la etiqueta [properties] adentro del archivo cruzado real 
+# e inyectamos directamente las directivas de enlace forzadas c_link_args y cpp_link_args.
+# Esto obliga al NDK de Android a arrastrar la librería física de X11 (-lX11) de forma inapelable.
+if [ -f "android-cross.txt" ]; then
+    echo "-> Inyectando directivas de enlace forzado X11 en android-cross.txt..."
+    sed -i "/\[properties\]/a c_link_args = ['-lX11', '-llog']\ncpp_link_args = ['-lX11', '-llog']" android-cross.txt
+fi
+
+# Lanzamos el setup con el archivo cruzado ya inyectado con tus flags exactas
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -84,12 +94,8 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
-echo "🚀 3. COMPILANDO CON NINJA NATIVO Y FORZADO DE LDFLAGS"
+echo "🚀 3. COMPILANDO CON NINJA NATIVO"
 echo "========================================================="
-# 🟢 LA ESTOCADA DEL ENLAZADOR: Exportamos LDFLAGS de forma directa en la orden de compilación.
-# Al inyectar aquí el flag '-lX11', obligamos de forma nativa a que Clang++ enlace los símbolos
-# de XOpenDisplay al cerrar la compilación en el bloque 1774, solucionando la caída definitivamente.
-export LDFLAGS="-lX11"
 meson compile -C build
 
 echo "========================================================="
