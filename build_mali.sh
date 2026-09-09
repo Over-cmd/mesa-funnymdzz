@@ -2,24 +2,34 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. REGISTRANDO LA SUITE COMPLETA DE ADRENOTOOLS EN VULKAN"
+echo "🧬 1. SANEAMIENTO Y REGISTRO DE ADRENOTOOLS EN MESA"
 echo "========================================================="
+# 1. Saneamos memfd_create para entornos Termux
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
+# 2. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
+# 3. 🟢 EL ENGAÑO DE LA LIBRERÍA ATOMIC:
+# Modificamos en caliente el archivo meson.build en la zona de la linea 1581.
+# Cambiamos 'required : true' o la busqueda estricta por 'required : false' para evitar que
+# Meson colapse al no encontrar libatomic suelta en el Sysroot del NDK de Android.
+if [ -f "meson.build" ]; then
+    echo "-> Aplicando bypass virtual de libatomic en meson.build..."
+    sed -i "s/dependency('atomic')/dependency('atomic', required : false)/g" meson.build
+    sed -i "s/find_library('atomic')/find_library('atomic', required : false)/g" meson.build
+fi
+
+# 4. Soldamos el arsenal de variables de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
-    
     sed -i '1i #include <stdlib.h>' "$TARGET_INSTANCE"
     sed -i '2i #include <fcntl.h>' "$TARGET_INSTANCE"
     sed -i '3i #include <unistd.h>' "$TARGET_INSTANCE"
     
-    # Inyectamos el constructor estático con las 7 firmas clave de adrenotools + Kbase
     sed -i '4i __attribute__((constructor)) static void panvk_adrenotools_mali_init() {' "$TARGET_INSTANCE"
     sed -i '5i     setenv("PAN_MESA_DEBUG", "kbase", 1);' "$TARGET_INSTANCE"
     sed -i '6i     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);' "$TARGET_INSTANCE"
@@ -32,8 +42,6 @@ if [ -f "$TARGET_INSTANCE" ]; then
     sed -i '13i    setenv("ADRENOTOOLS_HOOKS_PATH", "1", 1);' "$TARGET_INSTANCE"
     sed -i '14i    setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);' "$TARGET_INSTANCE"
     sed -i '15i }' "$TARGET_INSTANCE"
-    
-    echo "-> Suite de 7 variables biónicas de adrenotools grabadas en Vulkan."
 fi
 
 echo "========================================================="
@@ -48,10 +56,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# 🟢 LA ESTOCADA DEL LINKER X11: 
-# Inyectamos c_link_args y cpp_link_args con '-lX11' de forma coercitiva.
-# Esto le entrega a ld.lld el mapa exacto de XOpenDisplay y XCloseDisplay,
-# solucionando de golpe la caida en el bloque 1773 de libEGL.so.
+# Tu matriz exacta combinada con el enlace forzado de las cabeceras X11
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dc_link_args="-lX11" \
     -Dcpp_link_args="-lX11" \
@@ -90,7 +95,6 @@ echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "aarch64-linux-android-strip" -o -name "llvm-strip" | head -n 1)
 "$STRIP_TOOL" ./build/src/panfrost/vulkan/libvulkan_panfrost.so
 
-# Intentamos también aplicar strip sobre las librerías gráficas de Gallium y EGL generadas si existen
 find build/ -name "libEGL.so*" -exec "$STRIP_TOOL" {} \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec "$STRIP_TOOL" {} \; 2>/dev/null || true
 
@@ -101,7 +105,6 @@ mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
 cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
 
-# Buscamos y copiamos de forma dinamica las librerías EGL, GL y glapi mapeadas por Ninja
 find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libEGL.so.1 \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; 2>/dev/null || true
 find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
@@ -110,7 +113,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido con Suite Completa Adrenotools y EGL X11",
+  "description": "Custom PanVK Hibrido Optimizado con tus Flags Exactas",
   "author": "Mesa & Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
