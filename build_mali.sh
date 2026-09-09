@@ -12,27 +12,9 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. Inyectamos los link_args forzados en el archivo local que auditamos
-if [ -f "src/egl/meson.build" ]; then
-    echo "-> Soldando link_args -lX11 directamente en la raíz de la librería EGL..."
-    sed -i "s/link_args_for_egl = \[\]/link_args_for_egl = \['-lX11', '-llog'\]/g" src/egl/meson.build
-fi
-
-# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
-if [ -f "meson.build" ]; then
-    echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
-    for lib in "atomic" "dl" "rt"; do
-        sed -i "s/\(find_library(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-        sed -i "s/\(dependency(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
-        sed -i "s/cc.find_library('${lib}')/cc.find_library('${lib}', required : false)/g" meson.build
-        sed -i "s/cc.find_library(\"${lib}\")/cc.find_library('${lib}', required : false)/g" meson.build
-    done
-fi
-
-# 5. 🟢 EL PUENTE DE BINARIOS X11 PARA ANDROID (AARCH64):
+# 3. 🟢 EL PUENTE DE BINARIOS X11 PARA ANDROID (AARCH64):
 # Descargamos los paquetes binarios reales compilados de libx11 y libxcb desde el espejo oficial de Termux.
-# Los extraemos de forma local en nuestra carpeta de shims y forzamos a que el buscador -L los lea,
-# solucionando de golpe el error de 'unable to find library -lX11' en la compilación cruzada.
+# Los extraemos de forma local en nuestra carpeta de shims.
 mkdir -p shims/lib
 echo "-> Descargando librerías binarias X11 de Termux para AArch64..."
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
@@ -40,7 +22,6 @@ wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 
-# Extraemos los debs y movemos los archivos .so reales al pool de Shims
 for deb in *.deb; do
     if [ -f "$deb" ]; then
         ar x "$deb"
@@ -50,6 +31,26 @@ for deb in *.deb; do
     fi
 done
 echo "-> Pool de binarios cruzados X11 estructurado en shims/lib/."
+
+# 4. 🟢 LA ESTOCADA QUIRÚRGICA CONFIRMADA EN SRC/EGL/MESON.BUILD:
+# Modificamos directamente el archivo local de libegl. Buscamos link_args_for_egl 
+# e inyectamos el flag de ruta -L apuntando a nuestros shims y la orden de enlace -lX11.
+# Esto confina el hack de X11 de forma exclusiva dentro de libEGL.so sin estorbar a libgallium o libdrm.
+if [ -f "src/egl/meson.build" ]; then
+    echo "-> Inyectando link_args de precisión local en las mangueras de libegl..."
+    sed -i "s|link_args_for_egl = \[\]|link_args_for_egl = \['-L$GITHUB_WORKSPACE/shims/lib', '-lX11', '-llog'\]|g" src/egl/meson.build
+fi
+
+# 5. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+if [ -f "meson.build" ]; then
+    echo "-> Ejecutando desvío de dependencias en meson.build..."
+    for lib in "atomic" "dl" "rt"; do
+        sed -i "s/\(find_library(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
+        sed -i "s/\(dependency(['\"]${lib}['\"]\)\([^)]*\))/\1\2, required : false)/g" meson.build
+        sed -i "s/cc.find_library('${lib}')/cc.find_library('${lib}', required : false)/g" meson.build
+        sed -i "s/cc.find_library(\"${lib}\")/cc.find_library('${lib}', required : false)/g" meson.build
+    done
+fi
 
 # 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
@@ -85,10 +86,8 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Forzamos a que Meson añada nuestra carpeta de shims/lib en la ruta de busqueda del linker cruzado
+# Matriz limpia original libre de argumentos link parásitos que cegaban al NDK
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
-    -Dc_link_args="-L$GITHUB_WORKSPACE/shims/lib" \
-    -Dcpp_link_args="-L$GITHUB_WORKSPACE/shims/lib" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
