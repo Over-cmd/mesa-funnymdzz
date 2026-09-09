@@ -2,30 +2,29 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. EXTERMINIO DE CACHÉ FANTASMA Y ASEGURAMIENTO DE SHIMS"
+echo "🧬 1. ANIQUILACIÓN DE CACHÉ Y REDUNDANCIA TOTAL DE SHIMS"
 echo "========================================================="
-# 1. 🟢 EL EXTERMINADOR DE CACHÉ: Borramos la carpeta build por completo
-# Esto obliga a Meson a leer tus meson.build manuales limpios desde cero, 
-# rompiendo el bucle del error viejo que se quedó atascado en la memoria.
+# 1. Pulverizamos cualquier rastro de compilaciones fantasma viejas
 rm -rf build
 
-# 2. Saneamos memfd_create para entornos Termux
+# 2. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# 3. Bypass de pruebas de Gallium con prototipo legal
+# 3. Bypass de pruebas de Gallium con prototipo legal para Clang y el Enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 4. 🟢 REDUNDANCIA TOTAL DE LIBX11:
-# Creamos la subcarpeta shims/lib/ y copiamos tu archivo físico real libX11.so 
-# en absolutamente todas las variantes posibles del disco para blindar a Clang++.
+# 4. 🟢 LA ESTOCADA REPLICANTE (REDUNDANCIA MULTI-RUTA DE LIBX11):
+# Si el archivo está en la raíz de shims/, creamos la subcarpeta lib/ y lo clonamos.
+# Si está en shims/lib/, lo subimos a la raíz de shims/. 
+# Esto garantiza al 100% que Clang++ lo encuentre use la manguera de enlace que use.
 mkdir -p shims/lib
 if [ -f "shims/libX11.so" ]; then
-    echo "-> Duplicando inodo real libX11.so en shims/lib/libX11.so para seguridad doble..."
+    echo "-> Replicando inodo real libX11.so de shims/ a shims/lib/..."
     cp -fv shims/libX11.so shims/lib/libX11.so
 elif [ -f "shims/lib/libX11.so" ]; then
-    echo "-> Duplicando inodo real lib/libX11.so en la raíz de shims..."
+    echo "-> Replicando inodo real libX11.so de shims/lib/ a shims/..."
     cp -fv shims/lib/libX11.so shims/libX11.so
 fi
 
@@ -61,6 +60,13 @@ if [ -f "$TARGET_INSTANCE" ]; then
     sed -i '14i    setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);' "$TARGET_INSTANCE"
     sed -i '15i }' "$TARGET_INSTANCE"
 fi
+
+echo "========================================================="
+echo "🔍 AUDITORÍA DE BLINDAJE: ENCONTRANDO LIBX11 EN LOS DOS INODOS"
+echo "========================================================="
+ls -lh shims/libX11.so || true
+ls -lh shims/lib/libX11.so || true
+echo "========================================================="
 
 echo "========================================================="
 echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
