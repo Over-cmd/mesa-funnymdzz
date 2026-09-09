@@ -12,10 +12,16 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 EL ESCUDO TRIPLE DE DEPENDENCIAS (ATOMIC, DL, RT):
-# Usamos un comodín elástico para atrapar variantes de comillas y espacios en meson.build.
-# Volvemos opcionales (required : false) a atomic, dl y rt de un solo golpe. 
-# Esto anula los portazos de las líneas 1581, 1772 y 1794 porque Android ya las lleva integradas.
+# 3. 🟢 EL PARCHE QUIRÚRGICO DE EGL X11:
+# En lugar de usar link_args globales que rompen a Zlib en el bloque 125, inyectamos el flag 
+# '-lX11' de forma exclusiva en el archivo de construcción local de EGL para solucionar
+# los símbolos XOpenDisplay sin molestar a los otros subproyectos del build.
+if [ -f "src/egl/meson.build" ]; then
+    echo "-> Soldando flag -lX11 de precisión en las mangueras locales de EGL..."
+    sed -i "s/dependencies : \[/dependencies : \[dependency('x11', required: false), /g" src/egl/meson.build
+fi
+
+# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -26,7 +32,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 4. Soldamos el arsenal de variables de adrenotools en panvk_instance.c
+# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -60,9 +66,8 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
+# Tu matriz limpia libre de link_args parásitos globales
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
-    -Dc_link_args="-lX11" \
-    -Dcpp_link_args="-lX11" \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
     -Dstrip=false \
