@@ -29,19 +29,17 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 5. 🟢 EL INYECTOR MULTI-SYSROOT DE BINARIOS X11 DE TERMUX:
-# Descargamos los paquetes binarios reales de Termux y los sembramos de forma redundante 
-# en todas las rutas posibles del Sysroot de Android del NDK. Esto rompe el candado 
-# de 'unable to find library -lX11' de forma matemática e inapelable.
+# 5. 🟢 EL INYECTOR QUIRÚRGICO DE BINARIOS X11 EN LA CARPETA SHIMS REAL:
+# Descargamos los paquetes binarios de Termux y los sembramos directamente adentro 
+# del inodo local de Shims que Clang++ lee de forma nativa a través del flag -L de tu log.
 mkdir -p TEMP_X11
 cd TEMP_X11
-echo "-> Extrayendo binarios AArch64 de Termux..."
+echo "-> Descargando librerías binarias X11 de Termux para AArch64..."
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 wget -q https://termux.dev || wget -q https://tsinghua.edu.tr
 
-# Creamos una carpeta local temporal para concentrar los archivos .so
 mkdir -p extracted_libs
 for deb in *.deb; do
     if [ -f "$deb" ]; then
@@ -53,18 +51,13 @@ for deb in *.deb; do
 done
 cd ..
 
-# Sembramos de forma masiva los binarios en todos los inodos de librerías del NDK
-SYSROOT_ROOT_AARCH64="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android"
-mkdir -p "$SYSROOT_ROOT_AARCH64"
-mkdir -p "$SYSROOT_ROOT_AARCH64/30"
-mkdir -p shims/lib
-
-cp -fv TEMP_X11/extracted_libs/*.so* "$SYSROOT_ROOT_AARCH64/" 2>/dev/null || true
-cp -fv TEMP_X11/extracted_libs/*.so* "$SYSROOT_ROOT_AARCH64/30/" 2>/dev/null || true
+# Sembramos de forma redundante tanto en shims/ como en shims/lib/ para blindar el buscador
+mkdir -p "$GITHUB_WORKSPACE/shims"
+mkdir -p "$GITHUB_WORKSPACE/shims/lib"
 cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/" 2>/dev/null || true
 cp -fv TEMP_X11/extracted_libs/*.so* "$GITHUB_WORKSPACE/shims/lib/" 2>/dev/null || true
 rm -rf TEMP_X11
-echo "-> Saneamiento masivo multi-sysroot del NDK completado."
+echo "-> Carpeta de Shims local del espacio de trabajo inyectada con éxito total."
 
 # 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
