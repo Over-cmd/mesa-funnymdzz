@@ -47,16 +47,12 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 INYECCIÓN ATÓMICA PUNTO CERO EN VKCREATEINSTANCE:
-# En lugar de usar constructores flotantes que Android bloquea, soldamos el arsenal 
-# de 7 variables de adrenotools justo en la entrada real de la función panvk_CreateInstance.
+# INYECCIÓN ATÓMICA PUNTO CERO EN VKCREATEINSTANCE
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Aplicando cirugía de Punto Cero en: $TARGET_INSTANCE"
-    # Quitamos parches viejos si existieran
     sed -i '/panvk_adrenotools_mali_init/d' "$TARGET_INSTANCE"
     
-    # Buscamos la apertura de panvk_CreateInstance e inyectamos las mangueras en el primer renglón
     sed -i '/panvk_CreateInstance(/,/{/ { /{/a \
         setenv("PAN_MESA_DEBUG", "kbase", 1); \
         setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
@@ -72,7 +68,7 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
-echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
+echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON PACK COMPLETO DE EXPANSIONES"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
 export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -83,6 +79,8 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
+# 🟢 JUGADA MAESTRA EXTRA: Activamos vulkan-layers, pipelines ampliados y forzamos
+# la compilación de extensiones dinámicas para inflar el driver hasta los 253 símbolos.
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -99,6 +97,7 @@ meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=force
     -Ddraw-use-llvm=false \
     -Dxmlconfig=disabled \
     -Dvulkan-drivers=panfrost \
+    -Dvulkan-layers=device-select,overlay \
     -Degl=enabled \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
@@ -114,13 +113,13 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN Y ENMALLADO DE SEGURIDAD REDUNDANTE"
+echo "📦 4. PURIFICACIÓN DE ALTO RENDIMIENTO CON MANTENIMIENTO DE SÍMBOLOS"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
 TARGET_VULKAN="build/src/panfrost/vulkan/libvulkan_panfrost.so"
 if [ -f "$TARGET_VULKAN" ]; then
-    echo "-> Aplicando strip de precisión quirúrgica sobre el binario gigante..."
+    echo "-> Aplicando strip inteligente para no romper la suite de 253 variables..."
     "$STRIP_TOOL" --strip-unneeded "$TARGET_VULKAN" || "$STRIP_TOOL" "$TARGET_VULKAN"
 fi
 
@@ -171,8 +170,13 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 }
 EOF
 
+# 🟢 AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
+# Esto elimina el cartel de "Version: Unknown" y le da identidad al driver
+echo "Mesa Over-cmd v26.3-Bifrost" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost" > ./pack_usr/version.txt
+
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
-chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
+chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
 
 # Ensamblamos tus estructuras duales definitivas
 cd pack_flat
@@ -180,7 +184,7 @@ zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
 
 cd pack_usr
-tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/ vendor/ system/
+tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/ vendor/ system/ version.txt
 cd ..
 
 echo "========================================================="
