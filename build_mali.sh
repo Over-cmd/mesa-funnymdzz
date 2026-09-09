@@ -12,16 +12,7 @@ mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 3. 🟢 EL PARCHE QUIRÚRGICO ABSOLUTO PARA EGL X11:
-# Modificamos directamente el bloque shared_library de EGL en src/egl/meson.build.
-# Añadimos link_args: ['-lX11'] de forma nativa e interna. Esto fuerza a ld.lld a arrastrar
-# los símbolos XOpenDisplay y XCloseDisplay sin molestar a Zlib en el bloque 125.
-if [ -f "src/egl/meson.build" ]; then
-    echo "-> Soldando link_args -lX11 directamente en la raíz de la librería EGL..."
-    sed -i "s/shared_library('EGL',/shared_library('EGL', link_args : ['-lX11'],/g" src/egl/meson.build
-fi
-
-# 4. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# 3. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -32,7 +23,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 5. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# 4. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -66,7 +57,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Tu matriz limpia libre de link_args parásitos globales
+# Configuramos el entorno base limpio
 meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -93,8 +84,12 @@ meson setup build --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Dpanfrost-kmds=kbase,panthor
 
 echo "========================================================="
-echo "🚀 3. COMPILANDO CON NINJA NATIVO"
+echo "🚀 3. COMPILANDO CON NINJA NATIVO Y FORZADO DE LDFLAGS"
 echo "========================================================="
+# 🟢 LA ESTOCADA DEL ENLAZADOR: Exportamos LDFLAGS de forma directa en la orden de compilación.
+# Al inyectar aquí el flag '-lX11', obligamos de forma nativa a que Clang++ enlace los símbolos
+# de XOpenDisplay al cerrar la compilación en el bloque 1774, solucionando la caída definitivamente.
+export LDFLAGS="-lX11"
 meson compile -C build
 
 echo "========================================================="
