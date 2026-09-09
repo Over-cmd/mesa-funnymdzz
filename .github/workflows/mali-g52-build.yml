@@ -1,60 +1,84 @@
-name: Factoría Híbrida Mesa PanVK v301
+name: "Construya PanVK Bifrost Vulkan 1.3 Paquete dual (ZIP y TAR.ZST)"
 
 on:
+  push:
+    branches: [ main, ci ]
   workflow_dispatch:
 
 jobs:
-  build-mali:
+  build-android-wrapper:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar el Repositorio de Over-cmd
-        uses: actions/checkout@v4
-        with:
-          submodules: true
+    - name: 📥 1. Clonar tu propio Repositorio Fork Directo de Mesa
+      uses: actions/checkout@v4
 
-      - name: Saneamiento de Repositorios Host y Requisitos de Sistema
-        run: |
-          echo "========================================================="
-          echo "🧬 DESVIANDO REPOSITORIOS CORRUPTOS DEL HOST DE GITHUB"
-          echo "========================================================="
-          # 🟢 EL EXTERMINADOR DE REPOS ROTOS:
-          # Borramos de cuajo la lista de Google Chrome estable para evitar de forma 
-          # matemática el colapso del 'Hash Sum mismatch' y el exit code 100.
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo rm -f /etc/apt/sources.list.d/google*.list
-          
-          # Forzamos una actualización limpia del resto del sistema operativo del Host
-          sudo apt-get update || true
-          
-          echo "-> Instalando mangueras lógicas de Meson y Ninja..."
-          sudo apt-get install -y meson ninja-build pkg-config envsubst python3 zstd zip
+    - name: 🔧 2. Instalar Suite de Dependencias y Herramientas Gráficas en el Host
+      run: |
+        echo "========================================================="
+        echo "🧬 SANEAMIENTO ANTIVIRAL: DESVIANDO REPOSITORIOS CORRUPTOS"
+        echo "========================================================="
+        # 🟢 EL EXTERMINADOR DE REPOS ROTOS:
+        # Eliminamos del Host de GitHub Actions las listas parásitas de Google Chrome 
+        # que causaban el colapso del 'Hash Sum mismatch' y el exit code 100 de forma inapelable.
+        sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+        sudo rm -f /etc/apt/sources.list.d/google*.list
+        
+        # Forzamos una actualización limpia de las mangueras de Ubuntu Ports
+        sudo apt-get update || true
+        
+        echo "-> Instalando suite pesada original de compilación..."
+        sudo apt-get install -y ninja-build pkg-config python3-mako python3-ply python3-yaml zstd \
+          gettext flex bison glslang-tools rustc cargo python3-pip zip libwayland-dev wayland-protocols \
+          libxcb1-dev libx11-xcb-dev libxcb-dri3-dev libxcb-randr0-dev libxcb-xfixes0-dev \
+          libxcb-dri2-0-dev libxcb-shm0-dev libxcb-glx0-dev libxcb-keysyms1-dev \
+          libxcb-present-dev libxcb-sync-dev libxcb-xinerama0-dev libxshmfence-dev \
+          libxrandr-dev libxrender-dev libxext-dev libx11-dev x11proto-dev libdrm-dev
+        
+        sudo apt-get install -y llvm-20-dev libclang-20-dev libclc-20-dev libllvmspirvlib-20-dev spirv-tools libelf-dev
+        sudo pip3 install --break-system-packages --ignore-installed mako PyYAML meson ninja packaging
 
-      - name: Configurar Entorno Cruzado de Android NDK (API 30)
-        run: |
-          echo "========================================================="
-          echo "🔧 PREPARANDO LAS HERRAMIENTAS DE COMPILACIÓN CRUZADA"
-          echo "========================================================="
-          # Sincronizamos las mangueras lógicas del NDK oficial del runner
-          echo "ANDROID_NDK_LATEST_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
-          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+    - name: 🔧 3. Generar las Tres Herramientas Nativas en el Host y Enlazar Shims de Funny
+      run: |
+        meson setup build-host -Dplatforms=[] -Dgallium-drivers=[] -Dvulkan-drivers=[] -Dtools=panfrost -Dprecomp-compiler=enabled -Dinstall-precomp-compiler=true -Dllvm=enabled -Dmesa-clc=enabled -Dinstall-mesa-clc=true
+        ninja -C build-host src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen2 src/panfrost/clc/panfrost_compile
+        
+        ln -sf "src/compiler/clc/mesa_clc" "build-host/src/compiler/clc/mesa-clc"
+        ln -sf "src/compiler/spirv/vtn_bindgen2" "build-host/src/compiler/spirv/vtn-gen2"
+        
+        echo "$GITHUB_WORKSPACE/build-host/src/compiler/clc" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/build-host/src/compiler/spirv" >> $GITHUB_PATH
+        echo "$GITHUB_WORKSPACE/build-host/src/panfrost/clc" >> $GITHUB_PATH
 
-      - name: Ejecutar la Línea de Montaje del Script de Over-cmd
-        run: |
-          echo "========================================================="
-          echo "🚀 DETONANDO LA FORJA DIRECTA DEL CONTROLADOR MALI G52"
-          echo "========================================================="
-          chmod +x build_mali.sh
-          ./build_mali.sh
+    - name: 🧬 4. Forjar Shims del Sistema de Android (cutils/native_handle.h y pthread.h Global)
+      run: |
+        mkdir -p shims/include/cutils
+        cat << 'EOF' > shims/include/cutils/native_handle.h
+        #ifndef CUTILS_NATIVE_HANDLE_H
+        #define CUTILS_NATIVE_HANDLE_H
+        #include <stdint.h>
+        typedef struct native_handle { int version; int numFds; int numInts; int data; } native_handle_t;
+        #endif
+        EOF
+        cat << 'EOF' > shims/include/pthread.h
+        #ifndef SHIM_PTHREAD_H
+        #define SHIM_PTHREAD_H
+        #include_next <pthread.h>
+        #define pthread_cancel(x) 0
+        #define pthread_setcanceltype(x,y) 0
+        #define PTHREAD_CANCEL_ASYNCHRONOUS 0
+        #endif
+        EOF
 
-      - name: Desplegar Artefacto 1 - ZIP Plano para Bannerlator/Winlator
-        uses: actions/upload-artifact@v4
-        with:
-          name: panvk-bannerlator-driver
-          path: ./panvk-bannerlator-driver.zip
+    - name: 🚀 5. Otorgar Permisos de Ejecución y Detonar el Script build_mali.sh
+      run: |
+        chmod +x build_mali.sh
+        ./build_mali.sh
 
-      - name: Desplegar Artefacto 2 - TAR.ZST con Ramas Estructuradas de Android
-        uses: actions/upload-artifact@v4
-        with:
-          name: wrapper-android-system
-          path: ./wrapper.tar.zst
+    - name: 📤 6. Capturar y Subir el Arsenal Gráfico Dual Saneado (ZIP + TAR.ZST)
+      uses: actions/upload-artifact@v4
+      with:
+        name: panvk-mali-bifrost-dual-pack
+        path: |
+          panvk-bannerlator-driver.zip
+          wrapper.tar.zst
