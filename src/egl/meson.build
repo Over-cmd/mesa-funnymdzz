@@ -6,8 +6,8 @@ inc_egl = include_directories('.', 'main')
 c_args_for_egl = [asan_c_args]
 cpp_args_for_egl = []
 link_args_for_egl = []
-# Inyección Quirúrgica Over-cmd para obligar a EGL a tragar X11 de Termux
-link_args_for_egl += ['-L' + meson.project_source_root() + '/shims/lib', '-lX11', '-llog']
+# Inyección Quirúrgica Over-cmd Limpia sin rutas parásitas largas
+link_args_for_egl += ['-lX11', '-llog']
 link_deps_for_egl = []
 link_for_egl = []
 if with_dri
