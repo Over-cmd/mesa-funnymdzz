@@ -6,8 +6,8 @@ inc_egl = include_directories('.', 'main')
 c_args_for_egl = [asan_c_args]
 cpp_args_for_egl = []
 link_args_for_egl = []
-# 🟢 ENLACE DIRECTO ABSOLUTO: Pasamos la ruta del archivo físico para romper el candado del Sysroot
-link_args_for_egl += [meson.project_source_root() + '/shims/lib/libX11.so', '-llog']
+# Inyección Quirúrgica Over-cmd usando tu pool de shims verificado del repositorio
+link_args_for_egl += ['-L' + meson.project_source_root() + '/shims', '-lX11', '-llog']
 link_deps_for_egl = []
 link_for_egl = []
 if with_dri
