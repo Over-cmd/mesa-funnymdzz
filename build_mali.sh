@@ -2,21 +2,29 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. FORZADO DE REDUNDANCIA ABSOLUTA DE ARCHIVOS SHIMS"
+echo "🧬 1. SANEAMIENTO DIRECTO Y MATERIALIZACIÓN DE ARCHIVO SHIM"
 echo "========================================================="
-# 1. Creamos físicamente ambas rutas de carpetas en el espacio de trabajo del Host
+# 1. Forzamos la existencia física de las carpetas locales en el Host
 mkdir -p shims
 mkdir -p shims/lib
 
-# 2. Rastreamos dónde está tu archivo real libX11.so original del repositorio 
-# y lo clonamos de forma masiva en todas las variantes para que Clang++ lo vea sí o sí.
-if [ -f "shims/libX11.so" ]; then
-    echo "-> Duplicando de shims/ a shims/lib/..."
-    cp -fv shims/libX11.so shims/lib/libX11.so
-elif [ -f "shims/lib/libX11.so" ]; then
-    echo "-> Duplicando de shims/lib/ a shims/..."
-    cp -fv shims/lib/libX11.so shims/libX11.so
-fi
+# 2. 🟢 MATERIALIZADOR RELÁMPAGO DE COMPILACIÓN CRUZADA:
+# Escribimos un archivo de código C diminuto con las cabeceras requeridas por libEGL.so
+# y lo compilamos en un milisegundo usando el Clang nativo de Android del NDK. 
+# Esto machaca el puntero de texto plano roto de Git y genera un binario .so legítimo
+# en shims/lib/libX11.so para romper el candado sintáctico definitivamente.
+cat << 'EOF' > dummy_x11.c
+void* XOpenDisplay(const char* display_name) { return 0; }
+int XCloseDisplay(void* display) { return 0; }
+void* XCreateIC() { return 0; }
+void* XOpenIM() { return 0; }
+EOF
+
+CC_ANDROID="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang"
+
+echo "-> Horneando binario físico real libX11.so para Android..."
+"$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/lib/libX11.so
+rm -f dummy_x11.c
 
 # 3. Saneamos memfd_create para entornos Termux sin alterar código
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
@@ -60,13 +68,6 @@ if [ -f "$TARGET_INSTANCE" ]; then
 fi
 
 echo "========================================================="
-echo "🔍 AUDITORÍA DE SEGURIDAD TOTAL: COMPROBANDO AMBOS INODOS"
-echo "========================================================="
-ls -lh shims/libX11.so || echo "No está en la raíz"
-ls -lh shims/lib/libX11.so || echo "No está en subcarpeta lib"
-echo "========================================================="
-
-echo "========================================================="
 echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
@@ -78,7 +79,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# El setup se fuerza con reconfigure para obligar a Meson a romper cualquier caché fantasma
+# Se inicia el setup forzando --reconfigure para renovar los planos de Ninja limpios
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
