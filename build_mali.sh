@@ -4,11 +4,10 @@ set -e
 echo "========================================================="
 echo "🧬 1. SANEAMIENTO DIRECTO Y HORNEADO DOBLE DE ARCHIVOS SHIMS"
 echo "========================================================="
-# 1. Forzamos la existencia física de las carpetas locales en el Host
 mkdir -p shims
 mkdir -p shims/lib
 
-# 2. El doble horneador de binarios de metal real para X11
+# El doble horneador de binarios de metal real para X11
 cat << 'EOF' > dummy_x11.c
 void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
@@ -29,15 +28,15 @@ echo "-> Horneando binarios físicos reales de X11 en caliente..."
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/lib/libx11-xcb.so
 rm -f dummy_x11.c
 
-# 3. Saneamos memfd_create para entornos Termux
+# Saneamos memfd_create para entornos Termux
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# 4. Bypass de pruebas de Gallium
+# Bypass de pruebas de Gallium
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
 
-# 5. El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
+# El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
     echo "-> Ejecutando desvío de triple frecuencia en meson.build..."
     for lib in "atomic" "dl" "rt"; do
@@ -48,7 +47,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 6. Soldamos la suite biónica completa de adrenotools en panvk_instance.c
+# Soldamos la suite biónica completa de adrenotools en panvk_instance.c
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando el arsenal completo de adrenotools en: $TARGET_INSTANCE"
@@ -113,10 +112,19 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN Y ENMALLADO DE SEGURIDAD MULTI-RUTA"
+echo "🔍 🕵️‍♂️ PASO EXTRA: ESCÁNER FORENSE ABSOLUTO DE ARCHIVOS .SO"
+echo "========================================================="
+echo "-> Listando ubicación y conteo total de librerías generadas:"
+find build/ -name "*.so*" -exec ls -lh {} \;
+echo "========================================================="
+
+echo "========================================================="
+echo "📦 4. PURIFICACIÓN Y ENMALLADO DE SEGURIDAD SINCRONIZADO"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "aarch64-linux-android-strip" -o -name "llvm-strip" | head -n 1)
-"$STRIP_TOOL" ./build/src/panfrost/vulkan/libvulkan_panfrost.so
+
+TARGET_VULKAN=$(find build/ -name "libvulkan_panfrost.so" | head -n 1)
+"$STRIP_TOOL" "$TARGET_VULKAN"
 
 find build/ -name "libEGL.so*" -exec "$STRIP_TOOL" {} \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec "$STRIP_TOOL" {} \; 2>/dev/null || true
@@ -128,31 +136,24 @@ mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 mkdir -p ./pack_usr/vendor/lib64/hw
 mkdir -p ./pack_usr/system/lib64
 
-# 🟢 TRIPLE BLINDAJE SIMÉTRICO DE ALOJAMIENTO PARA VULKAN
-# Copiamos el archivo físico con los tres nombres posibles en el pool plano
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_panfrost.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/libvulkan_wrapper.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_flat/vulkan.panfrost.so
+# 🟢 CONFIGURACIÓN DEL PACK FLAT (ZIP PARA INSTALADOR PLANO):
+# El archivo físico se renombra exactamente como libvulkan_wrapper.so 
+# para encajar a la perfección con la orden del meta.json original.
+cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_wrapper.so
 
-# Sembramos los tres nombres en las mangueras de las carpetas internas de Android
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_panfrost.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/libvulkan_wrapper.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/usr/lib/vulkan.panfrost.so
-
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/vendor/lib64/hw/libvulkan_panfrost.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/vendor/lib64/hw/libvulkan_wrapper.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/vendor/lib64/hw/vulkan.panfrost.so
-
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/system/lib64/libvulkan_panfrost.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/system/lib64/libvulkan_wrapper.so
-cp -fv ./build/src/panfrost/vulkan/libvulkan_panfrost.so ./pack_usr/system/lib64/vulkan.panfrost.so
+# 🟢 CONFIGURACIÓN DEL PACK USR (TAR.ZST PARA ESTRUCTURA DE ANDROID NATIVA):
+# El archivo físico mantiene su nombre original de Mesa libvulkan_panfrost.so
+# para encajar al 100% con el wrapper_icd.aarch64.json de Google Android.
+cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_panfrost.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_panfrost.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/system/lib64/libvulkan_panfrost.so
 
 # Copiamos los binarios complementarios de OpenGL a todas las rutas
 find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libEGL.so \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libGL.so \; 2>/dev/null || true
 find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
-# Actualizamos los archivos ICD para mapear el driver nativo original exigido
+# 🟢 SINCRONIZACIÓN MILIMÉTRICA DE LOS ARCHIVOS METADATOS JSON:
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
@@ -162,7 +163,7 @@ cat << 'EOF' > ./pack_flat/meta.json
   "packageVersion": "26.3",
   "vendor": "Mesa",
   "driverVersion": "1",
-  "libraryName": "libvulkan_panfrost.so"
+  "libraryName": "libvulkan_wrapper.so"
 }
 EOF
 
@@ -179,7 +180,7 @@ EOF
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-# Comprimimos el arsenal robustecido
+# Comprimimos las dos estructuras ya calibradas de forma simétrica
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
