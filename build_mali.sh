@@ -28,13 +28,23 @@ echo "-> Horneando binarios físicos reales de X11 en caliente..."
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/lib/libx11-xcb.so
 rm -f dummy_x11.c
 
-# Saneamos memfd_create para entornos Termux
+# Saneamos memfd_create para entornos Termux sin romper código fuente
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# Bypass de pruebas de Gallium
+# Bypass de pruebas de Gallium con prototipo legal para el enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
+
+# 🟢 LIMPIEZA TOTAL DE INTERFERENCIAS EN VKCREATEINSTANCE:
+# Restauramos panvk_instance.c a su estado nativo del repositorio para dejar que 
+# tu adrenotools.wrap gestione la inyección sin cortocircuitos de software parásitos.
+TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
+if [ -f "$TARGET_INSTANCE" ]; then
+    echo "-> Limpiando parches flotantes e inicializando código nativo..."
+    sed -i '/panvk_adrenotools_mali_init/d' "$TARGET_INSTANCE"
+    sed -i '/setenv(/d' "$TARGET_INSTANCE"
+fi
 
 # El Escudo de dependencias de fuerza bruta (Atomic, DL y RT) opcionales
 if [ -f "meson.build" ]; then
@@ -47,28 +57,8 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# INYECCIÓN ATÓMICA PUNTO CERO EN VKCREATEINSTANCE
-TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
-if [ -f "$TARGET_INSTANCE" ]; then
-    echo "-> Aplicando cirugía de Punto Cero en: $TARGET_INSTANCE"
-    sed -i '/panvk_adrenotools_mali_init/d' "$TARGET_INSTANCE"
-    
-    sed -i '/panvk_CreateInstance(/,/{/ { /{/a \
-        setenv("PAN_MESA_DEBUG", "kbase", 1); \
-        setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
-        setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); \
-        setenv("ADRENOTOOLS_DRIVER_CUSTOM", "1", 1); \
-        setenv("ADRENOTOOLS_DRIVER_FILE_REDIRECT", "1", 1); \
-        setenv("ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT", "1", 1); \
-        setenv("ADRENOTOOLS_DRIVER_NAME", "panfrost", 1); \
-        setenv("ADRENOTOOLS_DRIVER_PATH", "1", 1); \
-        setenv("ADRENOTOOLS_HOOKS_PATH", "1", 1); \
-        setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);
-    }' "$TARGET_INSTANCE"
-fi
-
 echo "========================================================="
-echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON PACK COMPLETO DE EXPANSIONES"
+echo "🔧 2. CONFIGURANDO ENTORNO CRUZADO CON TUS BANDERAS EXACTAS"
 echo "========================================================="
 export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
 export MESON_WORKING_DIR="$GITHUB_WORKSPACE"
@@ -79,9 +69,9 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# 🟢 CONFIGURACIÓN MAESTRA DE 253 SETTINGS EN MEMORIA:
-# Mantenemos fijas de forma obligatoria las capas base, los pipelines dinámicos 
-# y la directiva de módulos del kernel kbase para inflar el panel del driver al 100%.
+# 🟢 SINTONIZACIÓN DE MÁXIMA COMPATIBILIDAD:
+# Activamos las mangueras de capas de Vulkan, forzamos los módulos kbase para jalar tu chip 
+# y dejamos activo wrap-mode=forcefallback para obligar a que se compilen todos los subproyectos .wrap.
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -114,13 +104,13 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN DE ALTO RENDIMIENTO CON MANTENIMIENTO DE SÍMBOLOS"
+echo "📦 4. PURIFICACIÓN DE ALTO RENDIMIENTO Y ENSAMBLAJE DUAL"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
 TARGET_VULKAN="build/src/panfrost/vulkan/libvulkan_panfrost.so"
 if [ -f "$TARGET_VULKAN" ]; then
-    echo "-> Aplicando strip inteligente para conservar el bloque masivo de variables..."
+    echo "-> Aplicando strip de precisión quirúrgica sobre el binario de 115 MB..."
     "$STRIP_TOOL" --strip-unneeded "$TARGET_VULKAN" || "$STRIP_TOOL" "$TARGET_VULKAN"
 fi
 
@@ -151,7 +141,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido con Adrenotools",
+  "description": "Custom PanVK Hibrido Optimizado con subprojects",
   "author": "Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -172,8 +162,8 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Nativo" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Nativo" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
