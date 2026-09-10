@@ -26,7 +26,7 @@ CC_ANDROID="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/a
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/lib/libx11-xcb.so
 rm -f dummy_x11.c
 
-# Saneamos memfd_create para entornos Termux sin alterar código fuente
+# Saneamos memfd_create para entornos Termux sin romper código fuente
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
 # Bypass de pruebas de Gallium con prototipo legal para el enlazador
@@ -45,10 +45,7 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 CIRUGÍA DE PUNTO CERO EN VKCREATEINSTANCE:
-# Conectamos las mangueras de control directamente en el primer renglón ejecutable 
-# de panvk_CreateInstance, forzando a que tu libadrenotools original del wrap desvíe 
-# las mangueras de la GPU burlando SELinux de Android en el acto.
+# INYECCIÓN ATÓMICA PUNTO CERO EN VKCREATEINSTANCE
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando activadores de Adrenotools en el Punto Cero de Vulkan..."
@@ -83,7 +80,6 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Se inicia el setup respetando al 100% tus archivos .wrap originales de subprojects
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -118,26 +114,24 @@ meson compile -C build
 echo "========================================================="
 echo "🔍 🕵️‍♂️ RADAR DE ESPECTRO COMPLETO: RASTREO TOTAL DE ARCHIVOS .SO"
 echo "========================================================="
-# Lanzamos un escaneo masivo de punta a punta del disco para pillar 
-# cualquier binario escondido tanto dentro como fuera de la carpeta build/
-echo "-> [1/2] LISTANDO ABSOLUTAMENTE TODOS LOS ARCHIVOS .SO EN EL ESPACIO DE TRABAJO:"
 find . -name "*.so*" -not -path "*/.git/*" -exec ls -lh {} \;
-
-echo ""
-echo "-> [2/2] MAPA DE CARGA DE CARPETAS INTERNAS DEL BUILD (VOLUMEN):"
-du -sh build/* || true
 echo "========================================================="
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN DE ALTO RENDIMIENTO Y ENSAMBLAJE DUAL"
+echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL AVANZADO"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
 TARGET_VULKAN="build/src/panfrost/vulkan/libvulkan_panfrost.so"
+TARGET_OVERLAY="build/src/vulkan/overlay-layer/libVkLayer_MESA_overlay.so"
+TARGET_SELECT="build/src/vulkan/device-select-layer/libVkLayer_MESA_device_select.so"
+
+# Aplicamos purificación sobre todos los Gigantes mapeados por el radar para aligerar la RAM
 if [ -f "$TARGET_VULKAN" ]; then
-    echo "-> Aplicando strip de precisión quirúrgica sobre el binario gigante..."
     "$STRIP_TOOL" --strip-unneeded "$TARGET_VULKAN" || "$STRIP_TOOL" "$TARGET_VULKAN"
 fi
+if [ -f "$TARGET_OVERLAY" ]; then "$STRIP_TOOL" --strip-unneeded "$TARGET_OVERLAY"; fi
+if [ -f "$TARGET_SELECT" ]; then "$STRIP_TOOL" --strip-unneeded "$TARGET_SELECT"; fi
 
 find build/ -name "libEGL.so*" -exec "$STRIP_TOOL" --strip-unneeded {} \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec "$STRIP_TOOL" --strip-unneeded {} \; 2>/dev/null || true
@@ -149,12 +143,21 @@ mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 mkdir -p ./pack_usr/vendor/lib64/hw
 mkdir -p ./pack_usr/system/lib64
 
-# Guardamos la librería física unificada de Vulkan como libvulkan_wrapper.so
+# 🟢 RESCATE ATÓMICO: Metemos tu suite de Vulkan unificada como libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_wrapper.so
-
 cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/system/lib64/libvulkan_wrapper.so
+
+# 🟢 INYECCIÓN DE LAS NUEVAS CAPAS DE FPS Y SELECCIÓN DE HARDWARE EN LA RAÍZ:
+if [ -f "$TARGET_OVERLAY" ]; then
+    cp -fv "$TARGET_OVERLAY" ./pack_flat/libVkLayer_MESA_overlay.so
+    cp -fv "$TARGET_OVERLAY" ./pack_usr/usr/lib/libVkLayer_MESA_overlay.so
+fi
+if [ -f "$TARGET_SELECT" ]; then
+    cp -fv "$TARGET_SELECT" ./pack_flat/libVkLayer_MESA_device_select.so
+    cp -fv "$TARGET_SELECT" ./pack_usr/usr/lib/libVkLayer_MESA_device_select.so
+fi
 
 # Copiamos los binarios complementarios de OpenGL a todas las rutas
 find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libEGL.so \; 2>/dev/null || true
@@ -166,7 +169,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido con Adrenotools Nativos",
+  "description": "Custom PanVK Hibrido con Capas Expandidas MESA",
   "author": "Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -187,13 +190,13 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost 253-Settings NATIVO" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost 253-Settings NATIVO" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Layers" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Layers" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-# Ensamblamos tus estructuras duales definitivas
+# Ensamblamos tus estructuras duales definitivas completas
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
