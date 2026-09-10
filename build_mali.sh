@@ -7,9 +7,13 @@ echo "========================================================="
 mkdir -p shims
 mkdir -p shims/lib
 
-# 🟢 ¡AQUÍ ESTÁ TU ESCUDO ESPEJO INDESTRUCTIBLE!
+# Creas el espejo en la carpeta shims local
 mkdir -p shims/src/util/u_gralloc
 touch shims/src/util/u_gralloc/force_aosp_abi.h
+
+# 🟢 LA NUEVA ESTOCADA: Creas el espejo en la raíz real del árbol por si acaso
+mkdir -p src/util/u_gralloc
+touch src/util/u_gralloc/force_aosp_abi.h
 
 # El doble horneador de binarios físicos reales de X11 en caliente
 cat << 'EOF' > dummy_x11.c
@@ -68,7 +72,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-sed -i "s|c_args = \[|c_args = \['-I\$GITHUB_WORKSPACE/shims', |g" android-cross.txt; sed -i "s|cpp_args = \[|cpp_args = \['-I\$GITHUB_WORKSPACE/shims', |g" android-cross.txt
+sed -i "s|c_args = \[|c_args = \['-Ibuild/../shims', |g" android-cross.txt; sed -i "s|cpp_args = \[|cpp_args = \['-Ibuild/../shims', |g" android-cross.txt
 
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
