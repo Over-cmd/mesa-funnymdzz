@@ -7,19 +7,12 @@ echo "========================================================="
 mkdir -p shims
 mkdir -p shims/lib
 
-# 🟢 RECOLECTOR CRUZADO EN TROZOS SEPARADOS CON ESCUDO DE RED:
-DOMINIO_GIT="https://github.com"
-USUARIO_FORK="Over-cmd"
-PROYECTO_WRAP="gamenative-wrapper.git"
-
-echo "-> Uniendo inodos de red en caliente..."
-URL_COMPLETA="${DOMINIO_GIT}/${USUARIO_FORK}/${PROYECTO_WRAP}"
-
 rm -rf gamenative-temp
+echo "-> Clonando tu rama wrapper-25 mediante enlace blindado directo..."
 git clone --depth 1 --branch wrapper-25 "https://github.com/Over-cmd/gamenative-wrapper.git" gamenative-temp
 
 echo "-> Ejecutando cirugías automáticas de patch_mesa.sh..."
-# Copiamos el parche maestro y la carpeta de virtualización al árbol de Mesa
+# Extraemos el parche maestro de tu repositorio y la suite de virtualización de texturas
 cp -fv gamenative-temp/patch_mesa.sh ./ || true
 mkdir -p src/vulkan/wrapper
 cp -rf gamenative-temp/src/vulkan/wrapper/* src/vulkan/wrapper/ || true
@@ -30,7 +23,6 @@ chmod +x patch_mesa.sh
 ./patch_mesa.sh || echo "-> Parche integrado en la matriz de construcción."
 
 # El doble horneador de binarios físicos reales de X11 en caliente para evitar baches
-# 🟢 Saneado sin espacios en el EOF
 cat << 'EOF' > dummy_x11.c
 void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
@@ -69,7 +61,6 @@ if [ -f "meson.build" ]; then
 fi
 
 # 🟢 INYECCIÓN DEL ESCUDO NATIVO DE CONFIGURACIÓN MESA EN CABECERAS:
-# Saneado sin espacios en el EOF
 TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
 if [ -f "$TARGET_PRIVATE" ]; then
     echo "-> Inyectando Escudo de Control Oficial de Mesa en: $TARGET_PRIVATE"
@@ -182,12 +173,11 @@ find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp
 find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
 # METADATOS JSON SINCRONIZADOS AL NOMBRE UNIFICADO:
-# 🟢 Saneado sin espacios en el EOF
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido + Gamenative Virtualizador",
+  "description": "Custom PanVK Hibrido + Gamenative Saneado",
   "author": "Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -197,7 +187,6 @@ cat << 'EOF' > ./pack_flat/meta.json
 EOF
 
 # El archivo ICD de Android apuntará de forma exacta a libvulkan_wrapper.so
-# 🟢 Saneado sin espacios en el EOF
 cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
@@ -209,8 +198,8 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost Gamenative Dynamic" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost Gamenative Dynamic" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Gamenative NAtivo" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Gamenative NAtivo" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
