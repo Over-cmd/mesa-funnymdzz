@@ -72,11 +72,6 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# 🟢 LA ESTOCADA ABSOLUTA DE GRALLOC:
-# Modificamos la bandera de pre-inclusión forzada en android-cross.txt en caliente.
-# Cambiamos la ruta relativa que rompía el Sanity Check por la ruta absoluta real del espacio de trabajo.
-sed -i "s|src/util/u_gralloc/force_aosp_abi.h|\$GITHUB_WORKSPACE/src/util/u_gralloc/force_aosp_abi.h|g" android-cross.txt
-
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
