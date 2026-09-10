@@ -130,7 +130,7 @@ mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 mkdir -p ./pack_usr/vendor/lib64/hw
 mkdir -p ./pack_usr/system/lib64
 
-# 🟢 UNIFICACIÓN DE NOMBRE REAL: Guardamos todo como libvulkan_panfrost.so de principio a fin
+# UNIFICACIÓN DE NOMBRE REAL: Guardamos todo como libvulkan_panfrost.so de principio a fin
 cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_panfrost.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_panfrost.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_panfrost.so
@@ -151,7 +151,7 @@ find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec 
 find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_flat/libGL.so \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libGL.so \; 2>/dev/null || true
 find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_flat/libglapi.so \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
-# 🟢 METADATOS JSON SINCRONIZADOS DE FORMA ESTRICTA AL NOMBRE REAL DE MESA:
+# METADATOS JSON SINCRONIZADOS DE FORMA ESTRICTA AL NOMBRE REAL DE MESA:
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
@@ -165,7 +165,8 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-cat << 'EOF' > ./pack_flat/libvulkan_panfrost.json
+# 🟢 EL SELLO REINA SOLICITADO: Se genera físicamente como libvulkan_panfrost.aarch64.json en la raíz
+cat << 'EOF' > ./pack_flat/libvulkan_panfrost.aarch64.json
 {
   "file_format_version": "1.0.0",
   "ICD": {
@@ -174,21 +175,22 @@ cat << 'EOF' > ./pack_flat/libvulkan_panfrost.json
   }
 }
 EOF
-cp -fv ./pack_flat/libvulkan_panfrost.json ./pack_flat/wrapper_icd.aarch64.json
-cp -fv ./pack_flat/libvulkan_panfrost.json ./pack_flat/vulkan.panfrost.json
+# Duplicamos con las rutas redundantes cruzadas por seguridad de los componentes java
+cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_flat/wrapper_icd.aarch64.json
+cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_flat/libvulkan_panfrost.json
 
 # Duplicamos la matriz exacta dentro de las mangueras internas del TAR.ZST
-cp -fv ./pack_flat/libvulkan_panfrost.json ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-cp -fv ./pack_flat/libvulkan_panfrost.json ./pack_usr/usr/share/vulkan/icd.d/libvulkan_panfrost.json
-cp -fv ./pack_flat/libvulkan_panfrost.json ./pack_usr/usr/share/vulkan/icd.d/vulkan.panfrost.json
+mkdir -p ./pack_usr/usr/share/vulkan/icd.d
+cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_usr/usr/share/vulkan/icd.d/libvulkan_panfrost.aarch64.json
+cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 
-echo "Mesa Over-cmd v26.3-Bifrost Panfrost Nativo" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost Panfrost Nativo" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Panfrost AArch64" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Panfrost AArch64" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/*.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-# Ensamblamos
+# Ensamblamos tus estructuras duales definitivas completas
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
@@ -198,4 +200,4 @@ tar -I 'zstd -v -19' -cf ../wrapper.tar.zst usr/ vendor/ system/ version.txt
 cd ..
 
 echo "========================================================="
-echo ">>> ARSENAL NATIVO COMPLETO GENERADO CON ÉXITO AL 100% <<<"
+echo ">>> ARSENAL NATIVO COMPLETADO CON ÉXITO AL 100% <<<"
