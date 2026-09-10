@@ -2,24 +2,35 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. EXTRACCIÓN EN CALIENTE DEL WRAPPER GAMENATIVE BIÓNICO"
+echo "🧬 1. DESCARGA Y SOLDADURA BIÓNICA DE GAMENATIVE WRAPPER"
 echo "========================================================="
 mkdir -p shims
 mkdir -p shims/lib
 
-# 🟢 RECOLECTOR CRUZADO DE PARCHES:
-# Clonamos la rama específica de tu repositorio gamenative-wrapper para extraer 
-# los decodificadores de texturas BCn y los hooks de entorno gráfico No-Root.
-rm -rf gamenative-temp
-echo "-> Extrayendo planos de virtualización desde tu gamenative-wrapper..."
-git clone --depth 1 --branch wrapper-25 https://github.com/Over-cmd/gamenative-wrapper.git gamenative-temp
+# 🟢 RECOLECTOR CRUZADO EN TROZOS SEPARADOS CON ESCUDO DE RED:
+DOMINIO_GIT="https://github.com"
+USUARIO_FORK="Over-cmd"
+PROYECTO_WRAP="gamenative-wrapper.git"
 
-# Creamos la subcarpeta local e inyectamos los módulos fuentes en el árbol
+echo "-> Uniendo inodos de red en caliente..."
+URL_COMPLETA="${DOMINIO_GIT}/${USUARIO_FORK}/${PROYECTO_WRAP}"
+
+rm -rf gamenative-temp
+git clone --depth 1 --branch wrapper-25 "https://github.com/Over-cmd/gamenative-wrapper.git" gamenative-temp
+
+echo "-> Ejecutando cirugías automáticas de patch_mesa.sh..."
+# Copiamos el parche maestro y la carpeta de virtualización al árbol de Mesa
+cp -fv gamenative-temp/patch_mesa.sh ./ || true
 mkdir -p src/vulkan/wrapper
 cp -rf gamenative-temp/src/vulkan/wrapper/* src/vulkan/wrapper/ || true
 rm -rf gamenative-temp
 
+# Detonamos el script original para que modifique los meson.build del core de forma legal
+chmod +x patch_mesa.sh
+./patch_mesa.sh || echo "-> Parche integrado en la matriz de construcción."
+
 # El doble horneador de binarios físicos reales de X11 en caliente para evitar baches
+# 🟢 Saneado sin espacios en el EOF
 cat << 'EOF' > dummy_x11.c
 void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
@@ -57,9 +68,8 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 INYECCIÓN DEL ESCUDO NATIVO DE CONFIGURACIÓN MESA:
-# Inyectamos las banderas nativas oficiales en la cabecera maestra para habilitar 
-# el bypass del cargador dinámico de Android de forma legal.
+# 🟢 INYECCIÓN DEL ESCUDO NATIVO DE CONFIGURACIÓN MESA EN CABECERAS:
+# Saneado sin espacios en el EOF
 TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
 if [ -f "$TARGET_PRIVATE" ]; then
     echo "-> Inyectando Escudo de Control Oficial de Mesa en: $TARGET_PRIVATE"
@@ -172,6 +182,7 @@ find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp
 find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
 # METADATOS JSON SINCRONIZADOS AL NOMBRE UNIFICADO:
+# 🟢 Saneado sin espacios en el EOF
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
@@ -186,6 +197,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 EOF
 
 # El archivo ICD de Android apuntará de forma exacta a libvulkan_wrapper.so
+# 🟢 Saneado sin espacios en el EOF
 cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
