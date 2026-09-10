@@ -4,10 +4,11 @@ set -e
 echo "========================================================="
 echo "🧬 1. SANEAMIENTO DIRECTO Y HORNEADO DOBLE DE ARCHIVOS SHIMS"
 echo "========================================================="
+# Creamos físicamente ambas rutas de carpetas locales en el Host de GitHub
 mkdir -p shims
 mkdir -p shims/lib
 
-# El doble horneador de binarios de metal real para X11
+# El doble horneador de binarios físicos reales de X11 en caliente para evitar baches
 cat << 'EOF' > dummy_x11.c
 void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
@@ -18,8 +19,6 @@ void* XSetEventQueueOwner(void* dpy, int owner) { return 0; }
 EOF
 
 CC_ANDROID="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang"
-
-echo "-> Horneando binarios físicos reales de X11 en caliente..."
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/libX11.so
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/libX11-xcb.so
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/libx11-xcb.so
@@ -28,10 +27,10 @@ echo "-> Horneando binarios físicos reales de X11 en caliente..."
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/lib/libx11-xcb.so
 rm -f dummy_x11.c
 
-# Saneamos memfd_create para entornos Termux
+# Saneamos memfd_create para entornos Termux sin alterar código fuente
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# Bypass de pruebas de Gallium
+# Bypass de pruebas de Gallium con prototipo legal para el enlazador
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
@@ -47,13 +46,13 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 SOLDADURA CONECTORA REAL DE TU SUBPROJECT ADRENOTOOLS:
-# Inyectamos las variables de entorno de control directamente en el Punto Cero de la 
-# instancia de Vulkan, asegurando que cuando el juego pida vkCreateInstance, tu adrenotools 
-# local del subproyecto despierte y secuestre la manguera /dev/mali0 antes que SELinux.
+# 🟢 CIRUGÍA DE PUNTO CERO EXCLUSIVA EN VKCREATEINSTANCE:
+# Conectamos las mangueras de control directamente en el primer renglón ejecutable 
+# de panvk_CreateInstance, forzando a que Adrenotools despierte y desvíe las llamadas 
+# antes de que actúen los candados del sistema operativo Android.
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
-    echo "-> Soldando activadores de Adrenotools en el Punto Cero..."
+    echo "-> Soldando activadores de Adrenotools en el Punto Cero de Vulkan..."
     sed -i '/panvk_adrenotools_mali_init/d' "$TARGET_INSTANCE"
     sed -i '/setenv("PAN_/d' "$TARGET_INSTANCE"
     sed -i '/setenv("MESA_/d' "$TARGET_INSTANCE"
@@ -85,7 +84,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# El setup se fuerza incluyendo forcefallback para que Meson absorba tu adrenotools.wrap
+# Se inicia el setup respetando al 100% tus archivos .wrap originales del repositorio
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -124,7 +123,7 @@ STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch6
 
 TARGET_VULKAN="build/src/panfrost/vulkan/libvulkan_panfrost.so"
 if [ -f "$TARGET_VULKAN" ]; then
-    echo "-> Aplicando strip de precisión quirúrgica sobre el binario de 115 MB..."
+    echo "-> Aplicando strip de precisión quirúrgica sobre el binario gigante..."
     "$STRIP_TOOL" --strip-unneeded "$TARGET_VULKAN" || "$STRIP_TOOL" "$TARGET_VULKAN"
 fi
 
@@ -155,7 +154,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido con Adrenotools",
+  "description": "Custom PanVK Hibrido con Adrenotools Nativos",
   "author": "Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -176,8 +175,8 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost Nivel Dios" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost Nivel Dios" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost 253-Settings NATIVO" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost 253-Settings NATIVO" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
