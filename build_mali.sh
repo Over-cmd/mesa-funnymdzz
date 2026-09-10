@@ -26,10 +26,10 @@ CC_ANDROID="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/a
 "$CC_ANDROID" -shared -fPIC dummy_x11.c -o shims/lib/libx11-xcb.so
 rm -f dummy_x11.c
 
-# Saneamos memfd_create para entornos Termux sin romper código fuente
+# Saneamos memfd_create para entornos Termux
 sed -i 's/#if defined(HAVE_MEMFD_CREATE) \&\& !defined __TERMUX__/#if defined(HAVE_MEMFD_CREATE)/' src/util/anon_file.c
 
-# Bypass de pruebas de Gallium con prototipo legal para el enlazador
+# Bypass de pruebas de Gallium
 mkdir -p src/gallium/auxiliary/util
 echo "void util_run_tests(void);" > src/gallium/auxiliary/util/u_tests.c
 echo "void util_run_tests(void) {}" >> src/gallium/auxiliary/util/u_tests.c
@@ -45,10 +45,13 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# INYECCIÓN ATÓMICA PUNTO CERO EN VKCREATEINSTANCE
+# 🟢 CIRUGÍA DE PUNTO CERO AVANZADA (INYECCIÓN DE IDENTIDAD DE SILICIO MALI G52):
+# Forzamos las 7 mangueras de adrenotools tradicionales y le sumamos el bypass de 
+# conformidad de Mesa junto al flag experimental de kbase. Esto obliga al cargador del 
+# emulador a amarrar de forma nativa e inmediata las llamadas del chip /dev/mali0.
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
-    echo "-> Soldando activadores de Adrenotools en el Punto Cero de Vulkan..."
+    echo "-> Aplicando cirugía de identidad de silicio en: $TARGET_INSTANCE"
     sed -i '/panvk_adrenotools_mali_init/d' "$TARGET_INSTANCE"
     sed -i '/setenv("PAN_/d' "$TARGET_INSTANCE"
     sed -i '/setenv("MESA_/d' "$TARGET_INSTANCE"
@@ -58,6 +61,7 @@ if [ -f "$TARGET_INSTANCE" ]; then
         setenv("PAN_MESA_DEBUG", "kbase", 1); \
         setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
         setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); \
+        setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1); \
         setenv("ADRENOTOOLS_DRIVER_CUSTOM", "1", 1); \
         setenv("ADRENOTOOLS_DRIVER_FILE_REDIRECT", "1", 1); \
         setenv("ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT", "1", 1); \
@@ -112,13 +116,7 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "🔍 🕵️‍♂️ RADAR DE ESPECTRO COMPLETO: RASTREO TOTAL DE ARCHIVOS .SO"
-echo "========================================================="
-find . -name "*.so*" -not -path "*/.git/*" -exec ls -lh {} \;
-echo "========================================================="
-
-echo "========================================================="
-echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL AVANZADO"
+echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL EXPANDIDO"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
@@ -126,7 +124,6 @@ TARGET_VULKAN="build/src/panfrost/vulkan/libvulkan_panfrost.so"
 TARGET_OVERLAY="build/src/vulkan/overlay-layer/libVkLayer_MESA_overlay.so"
 TARGET_SELECT="build/src/vulkan/device-select-layer/libVkLayer_MESA_device_select.so"
 
-# Aplicamos purificación sobre todos los Gigantes mapeados por el radar para aligerar la RAM
 if [ -f "$TARGET_VULKAN" ]; then
     "$STRIP_TOOL" --strip-unneeded "$TARGET_VULKAN" || "$STRIP_TOOL" "$TARGET_VULKAN"
 fi
@@ -143,13 +140,13 @@ mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 mkdir -p ./pack_usr/vendor/lib64/hw
 mkdir -p ./pack_usr/system/lib64
 
-# 🟢 RESCATE ATÓMICO: Metemos tu suite de Vulkan unificada como libvulkan_wrapper.so
+# Guardamos la librería física unificada de Vulkan como libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_wrapper.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/system/lib64/libvulkan_wrapper.so
 
-# 🟢 INYECCIÓN DE LAS NUEVAS CAPAS DE FPS Y SELECCIÓN DE HARDWARE EN LA RAÍZ:
+# Inyección de las capas de FPS y selección rescatadas por el radar
 if [ -f "$TARGET_OVERLAY" ]; then
     cp -fv "$TARGET_OVERLAY" ./pack_flat/libVkLayer_MESA_overlay.so
     cp -fv "$TARGET_OVERLAY" ./pack_usr/usr/lib/libVkLayer_MESA_overlay.so
@@ -190,8 +187,8 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Layers" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Layers" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Identity" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Identity" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
