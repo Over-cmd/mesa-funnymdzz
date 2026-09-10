@@ -45,16 +45,38 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 INYECCIÓN MAESTRA EN LÍNEA PLANA SANEADA (MÉTODO INDESTRUCTIBLE):
-# Eliminamos los saltos de línea con barras inclinadas que provocaban el 'unmatched {'
-# Inyectamos el bloque completo en una sola cadena compacta inmediatamente después de la llave de apertura.
+# 🟢 INYECCIÓN MAESTRA BIÓNICA MEDIANTE PYTHON (MÉTODO ULTRA-ROBUSTO INDESTRUCTIBLE):
+# Eliminamos sed de esta sección para evitar fallos de escape sintáctico en Bash.
+# Python abre el núcleo universal de forma limpia, localiza la función e introduce 
+# tus 6 variables oficiales a fuego en el microsegundo cero de la compilación.
 TARGET_CORE="src/vulkan/runtime/vk_instance.c"
 if [ -f "$TARGET_CORE" ]; then
-    echo "-> Realizando inyección a nivel de núcleo en: $TARGET_CORE"
-    sed -i '/setenv/d' "$TARGET_CORE"
-    
-    # Inyección limpia en un solo renglón blindado para evitar errores de Bash en GitHub Actions
-    sed -i '/vk_instance_init(/,/{/ { /{/a \    setenv("PAN_MESA_DEBUG", "kbase,sync", 1); setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1); setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1); setenv("MESA_VK_WSI_DEBUG", "always", 1);' "$TARGET_CORE"
+    echo "-> Realizando inyección molecular mediante Python en: $TARGET_CORE"
+    python3 -c "
+with open('$TARGET_CORE', 'r') as f:
+    code = f.read()
+
+# Limpiamos inyecciones parásitas previas por seguridad
+clean_code = '\n'.join([line for line in code.split('\n') if 'setenv' not in line])
+
+# Definimos el bloque inmutable exacto de tus variables de la GPU Mali G52
+payload = '''    setenv(\"PAN_MESA_DEBUG\", \"kbase,sync\", 1);
+    setenv(\"PAN_EXPERIMENTAL_KBASE_GL\", \"1\", 1);
+    setenv(\"MESA_LOADER_DRIVER_OVERRIDE\", \"panfrost\", 1);
+    setenv(\"MESA_VK_IGNORE_CONFORMANCE_WARNING\", \"1\", 1);
+    setenv(\"MESA_VK_WSI_PRESENT_MODE\", \"immediate\", 1);
+    setenv(\"MESA_VK_WSI_DEBUG\", \"always\", 1);'''
+
+# Buscamos la apertura de la función vk_instance_init e inyectamos el bloque
+if 'vk_instance_init(' in clean_code:
+    parts = clean_code.split('{', 1)
+    patched_code = parts[0] + '{\n' + payload + parts[1]
+    with open('$TARGET_CORE', 'w') as f:
+        f.write(patched_code)
+    print('-> Bypass del Núcleo Universal Vulkan inyectado con éxito absoluto.')
+else:
+    print('-> ADVERTENCIA: No se encontró la firma de la función en el core.')
+"
 fi
 
 echo "========================================================="
@@ -160,7 +182,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-# GENERACIÓN DEL MANIFIESTO EN 64 BITS OFICIAL:
+# GENERACIÓN DEL MANIFIESTO EN 64 BITS OFICIAL REIVINDICADO:
 cat << 'EOF' > ./pack_flat/panfrost_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
@@ -171,7 +193,7 @@ cat << 'EOF' > ./pack_flat/panfrost_icd.aarch64.json
 }
 EOF
 
-# Duplicamos las mangueras redundantes por seguridad de lectura
+# Duplicamos las mangueras redundantes por seguridad de lectura del emulador
 cp -fv ./pack_flat/panfrost_icd.aarch64.json ./pack_flat/wrapper_icd.aarch64.json
 cp -fv ./pack_flat/panfrost_icd.aarch64.json ./pack_flat/libvulkan_panfrost.json
 
@@ -185,7 +207,7 @@ echo "Mesa Over-cmd v26.3-Bifrost Panfrost NAtivo" > ./pack_usr/version.txt
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/*.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-# Ensamblamos tus estructuras duales completas
+# Ensamblamos tus estructuras duales definitivas completas
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
