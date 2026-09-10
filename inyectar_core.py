@@ -4,13 +4,13 @@ import os
 target_file = "src/vulkan/runtime/vk_instance.c"
 
 if os.path.exists(target_file):
-    print("-> [Python] Limpiando buffer y restaurando el core original de Mesa...")
+    print("-> [Python] Limpiando el buffer y restaurando el core original de Mesa...")
     os.system(f"git checkout -- {target_file}")
     
     with open(target_file, "r") as f:
         code = f.read()
 
-    # Definimos el bloque con triples comillas simples para que Python escriba las comillas de C exactas
+    # Definimos el bloque con las 6 variables oficiales para tu GPU Mali G52 sin Root
     payload = """    setenv("PAN_MESA_DEBUG", "kbase,sync", 1);
     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);
     setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);
@@ -18,23 +18,20 @@ if os.path.exists(target_file):
     setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
     setenv("MESA_VK_WSI_DEBUG", "always", 1);"""
 
-    # Buscamos el punto de entrada exacto de la funcion vk_instance_init en Mesa Puro
-    target_str = "vk_instance_init(struct vk_instance *instance,\n                 const struct vk_init_struct *init)\n{"
+    # Punto de anclaje universal indestructible en Mesa: la creacion de la instancia de Vulkan
+    target_str = "vk_instance_create(const struct vk_instance_definition *vulkan_definition,"
     
     if target_str in code:
-        patched = code.replace(target_str, target_str + "\n" + payload)
+        # Buscamos la apertura de la funcion e inyectamos tu arsenal bionico de forma legal en C
+        parts = code.split(target_str, 1)
+        sub_parts = parts[1].split("{", 1)
+        
+        patched_code = parts[0] + target_str + sub_parts[0] + "{\n" + payload + "\n" + sub_parts[1]
+        
         with open(target_file, "w") as f:
-            f.write(patched)
-        print("-> [Python] CIRUGÍA COMPLETADA CON ÉXITO ABSOLUTO AL 100%.")
+            f.write(patched_code)
+        print("-> [Python] CIRUGÍA MOLECULAR EN VK_INSTANCE_CREATE COMPLETADA AL 100%.")
     else:
-        # Fallback por si el formateador de tu rama de Mesa tiene espacios sutilmente diferentes
-        parts = code.split("vk_instance_init(", 1)
-        if len(parts) > 1:
-            patched = parts[0] + "vk_instance_init(\n" + payload + "\n" + parts[1]
-            with open(target_file, "w") as f:
-                f.write(patched)
-            print("-> [Python] Inyección de contingencia aplicada en la cabecera.")
-        else:
-            print("-> [Python] ERROR: No se pudo localizar la funcion de destino.")
+        print("-> [Python] ERROR: No se localizo el punto de anclaje universal en el runtime.")
 else:
-    print("-> [Python] ERROR CRÍTICO: El archivo vk_instance.c no existe en la ruta.")
+    print("-> [Python] ERROR CRÍTICO: El archivo vk_instance.c no existe en el arbol.")
