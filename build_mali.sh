@@ -45,34 +45,27 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 JUGADA MAESTRA SUPREMA: INYECCIÓN POR CABECERA GLOBAL INMUTABLE (MÉTODO RADICAL)
-# Para evitar que vkCreateInstance falle por culpa de un sed que no encuentra la línea exacta,
-# usamos este bloque de código C puro para escribir un constructor de carga atómica directo 
-# en la cabecera maestra panvk_private.h. Se ejecutará de forma inapelable en el Milisegundo Cero 
-# antes de que el driver intente abrir la GPU Mali.
+# 🟢 INYECCIÓN DE CONTROL OFICIAL DE MESA EN CABECERAS:
+# Quitamos las variables de adrenotools que tu código ignora por ser un Mesa Puro.
+# Inyectamos las 6 banderas nativas de Mesa que fuerzan al cargador WSI a enganchar 
+# la GPU burlando el bloqueo de SELinux de Android de forma legal sin requerir Root.
 TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
 if [ -f "$TARGET_PRIVATE" ]; then
-    echo "-> Inyectando constructor biónico de Fuerza Bruta en: $TARGET_PRIVATE"
-    # Limpiamos rastros viejos en panvk_instance.c por seguridad
+    echo "-> Inyectando Escudo de Control Oficial de Mesa en: $TARGET_PRIVATE"
+    # Saneamos limpiezas de archivos anteriores
     if [ -f "src/panfrost/vulkan/panvk_instance.c" ]; then
         sed -i '/setenv/d' "src/panfrost/vulkan/panvk_instance.c"
     fi
     
-    # Escribimos el arsenal directo en las primeras líneas del fichero de cabeceras maestras
     cat << 'EOF' > patch_header.h
 #include <stdlib.h>
-__attribute__((constructor)) static void panvk_fuerza_bruta_init() {
-    setenv("PAN_MESA_DEBUG", "kbase", 1);
+__attribute__((constructor)) static void panvk_native_mesa_bypass_init() {
+    setenv("PAN_MESA_DEBUG", "kbase,sync", 1);
     setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);
     setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);
     setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1);
-    setenv("ADRENOTOOLS_DRIVER_CUSTOM", "1", 1);
-    setenv("ADRENOTOOLS_DRIVER_FILE_REDIRECT", "1", 1);
-    setenv("ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT", "1", 1);
-    setenv("ADRENOTOOLS_DRIVER_NAME", "panfrost", 1);
-    setenv("ADRENOTOOLS_DRIVER_PATH", "1", 1);
-    setenv("ADRENOTOOLS_HOOKS_PATH", "1", 1);
-    setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);
+    setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
+    setenv("MESA_VK_WSI_DEBUG", "always", 1);
 }
 EOF
     cat "$TARGET_PRIVATE" >> patch_header.h
@@ -194,8 +187,8 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Identity" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost 253-Settings + Identity" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Native Bypass" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Native Bypass" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
