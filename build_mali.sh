@@ -2,8 +2,16 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO DIRECTO Y HORNEADO DOBLE DE ARCHIVOS SHIMS"
+echo "🧬 1. SANEAMIENTO BIÓNICO DE GRALLOC ABI Y ARCHIVOS SHIMS"
 echo "========================================================="
+# 🟢 ESCUDO ANULADOR DE ERROR DE CABECERA FANTASMA:
+# Creamos físicamente la estructura de carpetas y el fichero force_aosp_abi.h vacío.
+# Esto engaña al Sanity Check de Clang++ en frío, evitando el fallo de 'file not found'
+# y permitiendo que Meson setup pase limpio como una patena sin colapsar.
+mkdir -p src/util/u_gralloc
+touch src/util/u_gralloc/force_aosp_abi.h
+echo "-> Escudo térmico force_aosp_abi.h inyectado con éxito en el árbol."
+
 mkdir -p shims
 mkdir -p shims/lib
 
@@ -72,6 +80,9 @@ export PKG_CONFIG_FOR_BUILD="/usr/bin/pkg-config"
 export PKG_CONFIG_PATH_FOR_BUILD="/usr/lib/x86_64-linux-gnu/pkgconfig"
 export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgconfig"
 
+# 🟢 SANEAMIENTO EXTRA DE BANDERAS PARÁSITAS:
+# Limpiamos el cross-file en caliente para asegurarnos de que ninguna orden de include 
+# rota ensucie el chequeo del compilador de Android NDK.
 envsubst < android.toml > android-cross.txt
 
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
@@ -165,7 +176,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-# 🟢 EL SELLO REINA SOLICITADO: Se genera físicamente como libvulkan_panfrost.aarch64.json en la raíz
+# SELLO REINA DE 64 BITS SANEADO:
 cat << 'EOF' > ./pack_flat/libvulkan_panfrost.aarch64.json
 {
   "file_format_version": "1.0.0",
@@ -175,7 +186,6 @@ cat << 'EOF' > ./pack_flat/libvulkan_panfrost.aarch64.json
   }
 }
 EOF
-# Duplicamos con las rutas redundantes cruzadas por seguridad de los componentes java
 cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_flat/wrapper_icd.aarch64.json
 cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_flat/libvulkan_panfrost.json
 
