@@ -45,17 +45,13 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 INYECCIÓN MAESTRA SUPREMA: DIRECTA EN EL NÚCLEO UNIVERSAL DEL DRIVER (v359):
-# Limpiamos parches de instancias anteriores para dejar el archivo privado impecable
-TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
-if [ -f "$TARGET_PRIVATE" ]; then rm -f "$TARGET_PRIVATE"; git checkout -- "$TARGET_PRIVATE" || true; fi
-
+# 🟢 INYECCIÓN MAESTRA DIRECTA EN EL NÚCLEO UNIVERSAL DEL RUNTIME VULKAN:
 TARGET_CORE="src/vulkan/runtime/vk_instance.c"
 if [ -f "$TARGET_CORE" ]; then
     echo "-> Realizando inyección a nivel de núcleo en: $TARGET_CORE"
     sed -i '/setenv/d' "$TARGET_CORE"
     
-    # Inyectamos el bypass nativo de Mesa en la primera línea de ejecución real
+    # Grabamos a fuego las 6 variables que obligan a Android a abrir el canal WSI y la GPU Mali
     sed -i '/vk_instance_init(/,/{/ { /{/a \
         setenv("PAN_MESA_DEBUG", "kbase,sync", 1); \
         setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
@@ -110,7 +106,7 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL EXPANDIDO"
+echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DE PRECISIÓN ICD"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
@@ -151,16 +147,16 @@ if [ -f "$TARGET_SELECT" ]; then
 fi
 
 # Copiamos los binarios complementarios de OpenGL a todas las rutas
-find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libEGL.so \; 2>/dev/null || true
-find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libGL.so \; 2>/dev/null || true
-find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
+find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec cp -fv {} ./pack_flat/libEGL.so \; -exec cp -fv {} ./pack_usr/usr/lib/libEGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libEGL.so \; 2>/dev/null || true
+find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_flat/libGL.so \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libGL.so \; 2>/dev/null || true
+find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_flat/libglapi.so \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
 # METADATOS JSON SINCRONIZADOS AL NOMBRE UNIFICADO:
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido + Gamenative Saneado",
+  "description": "Custom PanVK Hibrido + Gamenative Core",
   "author": "Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -169,12 +165,14 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-# El archivo ICD de Android apuntará de forma exacta a libvulkan_wrapper.so
+# 🟢 LA ESTOCADA MAESTRA DEL MANIFIESTO NATIVO:
+# Modificamos library_path para forzar la carga relativa de la ruta actual del emulador.
+# Esto hace que el cargador de Vulkan de Android vea el archivo de inmediato y anule el 'failed'.
 cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "library_path": "libvulkan_wrapper.so",
+    "library_path": "./libvulkan_wrapper.so",
     "api_version": "1.3.289"
   }
 }
