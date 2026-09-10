@@ -23,14 +23,14 @@ c_args = [
     '--sysroot=' + ndk_sysroot,
     '-I' + working_dir + '/shims',
     '-D__TERMUX__',
-    '-include', working_dir + '/src/util/u_gralloc/force_aosp_abi.h'
+    '-D_GNU_SOURCE'
   ]
 cpp_args = [
     '--sysroot=' + ndk_sysroot,
     '-I' + working_dir + '/shims',
     '-fno-exceptions',
     '-D__TERMUX__',
-    '-include', working_dir + '/src/util/u_gralloc/force_aosp_abi.h'
+    '-D_GNU_SOURCE'
   ]
 c_link_args = [
     '-L/usr/local/lib/android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/18/lib/linux/aarch64',
