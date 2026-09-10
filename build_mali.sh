@@ -13,8 +13,8 @@ void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
 void* XCreateIC() { return 0; }
 void* XOpenIM() { return 0; }
-void* XGetXCBConnection(void* dpy) { return 0; }
-void* XSetEventQueueOwner(void* dpy, int owner) { return 0; }
+void* XGetXCBConnection(const void* dpy) { return 0; }
+void* XSetEventQueueOwner(const void* dpy, int owner) { return 0; }
 EOF
 
 CC_ANDROID="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang"
@@ -45,20 +45,16 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 INYECCIÓN DIRECTA EN EL NÚCLEO UNIVERSAL DEL RUNTIME VULKAN:
+# 🟢 INYECCIÓN MAESTRA EN LÍNEA PLANA SANEADA (MÉTODO INDESTRUCTIBLE):
+# Eliminamos los saltos de línea con barras inclinadas que provocaban el 'unmatched {'
+# Inyectamos el bloque completo en una sola cadena compacta inmediatamente después de la llave de apertura.
 TARGET_CORE="src/vulkan/runtime/vk_instance.c"
 if [ -f "$TARGET_CORE" ]; then
     echo "-> Realizando inyección a nivel de núcleo en: $TARGET_CORE"
     sed -i '/setenv/d' "$TARGET_CORE"
     
-    # Grabamos a fuego las mangueras de control para anular bloqueos de SELinux de Android sin Root
-    sed -i '/vk_instance_init(/,/{/ { /{/a \
-        setenv("PAN_MESA_DEBUG", "kbase,sync", 1); \
-        setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
-        setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); \
-        setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1); \
-        setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1); \
-        setenv("MESA_VK_WSI_DEBUG", "always", 1);' "$TARGET_CORE"
+    # Inyección limpia en un solo renglón blindado para evitar errores de Bash en GitHub Actions
+    sed -i '/vk_instance_init(/,/{/ { /{/a \    setenv("PAN_MESA_DEBUG", "kbase,sync", 1); setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1); setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1); setenv("MESA_VK_WSI_DEBUG", "always", 1);' "$TARGET_CORE"
 fi
 
 echo "========================================================="
@@ -164,7 +160,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-# 🟢 TU PARÁMETRO EXACTO SANEADO: Se forja panfrost_icd.aarch64.json limpio y sin cortes
+# GENERACIÓN DEL MANIFIESTO EN 64 BITS OFICIAL:
 cat << 'EOF' > ./pack_flat/panfrost_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
@@ -175,11 +171,11 @@ cat << 'EOF' > ./pack_flat/panfrost_icd.aarch64.json
 }
 EOF
 
-# Duplicamos la manguera redundante en los espejos del Host para tu EnvironmentManager.java
+# Duplicamos las mangueras redundantes por seguridad de lectura
 cp -fv ./pack_flat/panfrost_icd.aarch64.json ./pack_flat/wrapper_icd.aarch64.json
 cp -fv ./pack_flat/panfrost_icd.aarch64.json ./pack_flat/libvulkan_panfrost.json
 
-# Rematamos el árbol del paquete estructurado TAR.ZST para el cargador dinámico
+# Rematamos el volcado completo dentro de las rutas del TAR.ZST
 cp -fv ./pack_flat/panfrost_icd.aarch64.json ./pack_usr/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
 cp -fv ./pack_flat/panfrost_icd.aarch64.json ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 
@@ -189,7 +185,7 @@ echo "Mesa Over-cmd v26.3-Bifrost Panfrost NAtivo" > ./pack_usr/version.txt
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/*.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-# Ensamblamos tus estructuras duales definitivas completas
+# Ensamblamos tus estructuras duales completas
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
