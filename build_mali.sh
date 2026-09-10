@@ -2,10 +2,22 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO DIRECTO Y HORNEADO DOBLE DE ARCHIVOS SHIMS"
+echo "🧬 1. EXTRACCIÓN EN CALIENTE DEL WRAPPER GAMENATIVE BIÓNICO"
 echo "========================================================="
 mkdir -p shims
 mkdir -p shims/lib
+
+# 🟢 RECOLECTOR CRUZADO DE PARCHES:
+# Clonamos la rama específica de tu repositorio gamenative-wrapper para extraer 
+# los decodificadores de texturas BCn y los hooks de entorno gráfico No-Root.
+rm -rf gamenative-temp
+echo "-> Extrayendo planos de virtualización desde tu gamenative-wrapper..."
+git clone --depth 1 --branch wrapper-25 https://github.com/Over-cmd/gamenative-wrapper.git gamenative-temp
+
+# Creamos la subcarpeta local e inyectamos los módulos fuentes en el árbol
+mkdir -p src/vulkan/wrapper
+cp -rf gamenative-temp/src/vulkan/wrapper/* src/vulkan/wrapper/ || true
+rm -rf gamenative-temp
 
 # El doble horneador de binarios físicos reales de X11 en caliente para evitar baches
 cat << 'EOF' > dummy_x11.c
@@ -45,14 +57,12 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 INYECCIÓN DE CONTROL OFICIAL DE MESA EN CABECERAS:
-# Quitamos las variables de adrenotools que tu código ignora por ser un Mesa Puro.
-# Inyectamos las 6 banderas nativas de Mesa que fuerzan al cargador WSI a enganchar 
-# la GPU burlando el bloqueo de SELinux de Android de forma legal sin requerir Root.
+# 🟢 INYECCIÓN DEL ESCUDO NATIVO DE CONFIGURACIÓN MESA:
+# Inyectamos las banderas nativas oficiales en la cabecera maestra para habilitar 
+# el bypass del cargador dinámico de Android de forma legal.
 TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
 if [ -f "$TARGET_PRIVATE" ]; then
     echo "-> Inyectando Escudo de Control Oficial de Mesa en: $TARGET_PRIVATE"
-    # Saneamos limpiezas de archivos anteriores
     if [ -f "src/panfrost/vulkan/panvk_instance.c" ]; then
         sed -i '/setenv/d' "src/panfrost/vulkan/panvk_instance.c"
     fi
@@ -116,7 +126,7 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL AVANZADO"
+echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL EXPANDIDO"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
@@ -166,7 +176,7 @@ cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
   "name": "Mesa PanVK Driver for Mali G52",
-  "description": "Custom PanVK Hibrido con Capas Expandidas MESA",
+  "description": "Custom PanVK Hibrido + Gamenative Virtualizador",
   "author": "Over-cmd Community",
   "packageVersion": "26.3",
   "vendor": "Mesa",
@@ -187,8 +197,8 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost Native Bypass" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost Native Bypass" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Gamenative Dynamic" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Gamenative Dynamic" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
