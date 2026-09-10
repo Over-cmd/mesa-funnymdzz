@@ -45,31 +45,38 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 CIRUGÍA DE PUNTO CERO AVANZADA (INYECCIÓN DE IDENTIDAD DE SILICIO MALI G52):
-# Forzamos las 7 mangueras de adrenotools tradicionales y le sumamos el bypass de 
-# conformidad de Mesa junto al flag experimental de kbase. Esto obliga al cargador del 
-# emulador a amarrar de forma nativa e inmediata las llamadas del chip /dev/mali0.
-TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
-if [ -f "$TARGET_INSTANCE" ]; then
-    echo "-> Aplicando cirugía de identidad de silicio en: $TARGET_INSTANCE"
-    sed -i '/panvk_adrenotools_mali_init/d' "$TARGET_INSTANCE"
-    sed -i '/setenv("PAN_/d' "$TARGET_INSTANCE"
-    sed -i '/setenv("MESA_/d' "$TARGET_INSTANCE"
-    sed -i '/setenv("ADRENOTOOLS_/d' "$TARGET_INSTANCE"
+# 🟢 JUGADA MAESTRA SUPREMA: INYECCIÓN POR CABECERA GLOBAL INMUTABLE (MÉTODO RADICAL)
+# Para evitar que vkCreateInstance falle por culpa de un sed que no encuentra la línea exacta,
+# usamos este bloque de código C puro para escribir un constructor de carga atómica directo 
+# en la cabecera maestra panvk_private.h. Se ejecutará de forma inapelable en el Milisegundo Cero 
+# antes de que el driver intente abrir la GPU Mali.
+TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
+if [ -f "$TARGET_PRIVATE" ]; then
+    echo "-> Inyectando constructor biónico de Fuerza Bruta en: $TARGET_PRIVATE"
+    # Limpiamos rastros viejos en panvk_instance.c por seguridad
+    if [ -f "src/panfrost/vulkan/panvk_instance.c" ]; then
+        sed -i '/setenv/d' "src/panfrost/vulkan/panvk_instance.c"
+    fi
     
-    sed -i '/panvk_CreateInstance(/,/{/ { /{/a \
-        setenv("PAN_MESA_DEBUG", "kbase", 1); \
-        setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
-        setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); \
-        setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1); \
-        setenv("ADRENOTOOLS_DRIVER_CUSTOM", "1", 1); \
-        setenv("ADRENOTOOLS_DRIVER_FILE_REDIRECT", "1", 1); \
-        setenv("ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT", "1", 1); \
-        setenv("ADRENOTOOLS_DRIVER_NAME", "panfrost", 1); \
-        setenv("ADRENOTOOLS_DRIVER_PATH", "1", 1); \
-        setenv("ADRENOTOOLS_HOOKS_PATH", "1", 1); \
-        setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);
-    }' "$TARGET_INSTANCE"
+    # Escribimos el arsenal directo en las primeras líneas del fichero de cabeceras maestras
+    cat << 'EOF' > patch_header.h
+#include <stdlib.h>
+__attribute__((constructor)) static void panvk_fuerza_bruta_init() {
+    setenv("PAN_MESA_DEBUG", "kbase", 1);
+    setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);
+    setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);
+    setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1);
+    setenv("ADRENOTOOLS_DRIVER_CUSTOM", "1", 1);
+    setenv("ADRENOTOOLS_DRIVER_FILE_REDIRECT", "1", 1);
+    setenv("ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT", "1", 1);
+    setenv("ADRENOTOOLS_DRIVER_NAME", "panfrost", 1);
+    setenv("ADRENOTOOLS_DRIVER_PATH", "1", 1);
+    setenv("ADRENOTOOLS_HOOKS_PATH", "1", 1);
+    setenv("ADRENOTOOLS_REDIRECT_DIR", "1", 1);
+}
+EOF
+    cat "$TARGET_PRIVATE" >> patch_header.h
+    mv -f patch_header.h "$TARGET_PRIVATE"
 fi
 
 echo "========================================================="
@@ -116,7 +123,7 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL EXPANDIDO"
+echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL AVANZADO"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
