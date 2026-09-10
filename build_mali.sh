@@ -4,7 +4,6 @@ set -e
 echo "========================================================="
 echo "🧬 1. SANEAMIENTO DIRECTO Y HORNEADO DOBLE DE ARCHIVOS SHIMS"
 echo "========================================================="
-# Creamos físicamente ambas rutas de carpetas locales en el Host de GitHub
 mkdir -p shims
 mkdir -p shims/lib
 
@@ -46,10 +45,10 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 CIRUGÍA DE PUNTO CERO EXCLUSIVA EN VKCREATEINSTANCE:
+# 🟢 CIRUGÍA DE PUNTO CERO EN VKCREATEINSTANCE:
 # Conectamos las mangueras de control directamente en el primer renglón ejecutable 
-# de panvk_CreateInstance, forzando a que Adrenotools despierte y desvíe las llamadas 
-# antes de que actúen los candados del sistema operativo Android.
+# de panvk_CreateInstance, forzando a que tu libadrenotools original del wrap desvíe 
+# las mangueras de la GPU burlando SELinux de Android en el acto.
 TARGET_INSTANCE="src/panfrost/vulkan/panvk_instance.c"
 if [ -f "$TARGET_INSTANCE" ]; then
     echo "-> Soldando activadores de Adrenotools en el Punto Cero de Vulkan..."
@@ -84,7 +83,7 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
-# Se inicia el setup respetando al 100% tus archivos .wrap originales del repositorio
+# Se inicia el setup respetando al 100% tus archivos .wrap originales de subprojects
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
@@ -115,6 +114,19 @@ echo "========================================================="
 echo "🚀 3. COMPILANDO CON NINJA NATIVO"
 echo "========================================================="
 meson compile -C build
+
+echo "========================================================="
+echo "🔍 🕵️‍♂️ RADAR DE ESPECTRO COMPLETO: RASTREO TOTAL DE ARCHIVOS .SO"
+echo "========================================================="
+# Lanzamos un escaneo masivo de punta a punta del disco para pillar 
+# cualquier binario escondido tanto dentro como fuera de la carpeta build/
+echo "-> [1/2] LISTANDO ABSOLUTAMENTE TODOS LOS ARCHIVOS .SO EN EL ESPACIO DE TRABAJO:"
+find . -name "*.so*" -not -path "*/.git/*" -exec ls -lh {} \;
+
+echo ""
+echo "-> [2/2] MAPA DE CARGA DE CARPETAS INTERNAS DEL BUILD (VOLUMEN):"
+du -sh build/* || true
+echo "========================================================="
 
 echo "========================================================="
 echo "📦 4. PURIFICACIÓN DE ALTO RENDIMIENTO Y ENSAMBLAJE DUAL"
