@@ -51,7 +51,7 @@ if [ -f "$TARGET_CORE" ]; then
     echo "-> Realizando inyección a nivel de núcleo en: $TARGET_CORE"
     sed -i '/setenv/d' "$TARGET_CORE"
     
-    # Grabamos a fuego las mangueras de control para anular bloqueos de SELinux de Android sin Root
+    # Grabamos a fuego las 6 variables que obligan a Android a abrir el canal WSI y la GPU Mali
     sed -i '/vk_instance_init(/,/{/ { /{/a \
         setenv("PAN_MESA_DEBUG", "kbase,sync", 1); \
         setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
@@ -105,7 +105,7 @@ echo "========================================================="
 meson compile -C build
 
 echo "========================================================="
-echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DUAL BLINDADO"
+echo "📦 4. PURIFICACIÓN QUIRÚRGICA Y ENSAMBLAJE DE PRECISIÓN ICD"
 echo "========================================================="
 STRIP_TOOL=$(find "$ANDROID_NDK_LATEST_HOME" -name "llvm-strip" -o -name "aarch64-linux-android-strip" | head -n 1)
 
@@ -122,7 +122,7 @@ if [ -f "$TARGET_SELECT" ]; then "$STRIP_TOOL" --strip-unneeded "$TARGET_SELECT"
 find build/ -name "libEGL.so*" -exec "$STRIP_TOOL" --strip-unneeded {} \; 2>/dev/null || true
 find build/ -name "libGL.so*" -exec "$STRIP_TOOL" --strip-unneeded {} \; 2>/dev/null || true
 
-# Generamos el árbol de directorios estructurado original
+# Conservamos tu empaquetado estructurado original de 3 ramas
 mkdir -p ./pack_flat
 mkdir -p ./pack_usr/usr/lib
 mkdir -p ./pack_usr/usr/share/vulkan/icd.d
@@ -130,10 +130,10 @@ mkdir -p ./pack_usr/vendor/lib64/hw
 mkdir -p ./pack_usr/system/lib64
 
 # Guardamos la librería física unificada de Vulkan como libvulkan_wrapper.so
-cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_wrapper.so
-cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_wrapper.so
-cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_wrapper.so
-cp -fv "$TARGET_VULKAN" ./pack_usr/system/lib64/libvulkan_wrapper.so
+cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_panfrost.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_panfrost.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_panfrost.so
+cp -fv "$TARGET_VULKAN" ./pack_usr/system/lib64/libvulkan_panfrost.so
 
 # Inyección de las capas de FPS y selección rescatadas por el radar
 if [ -f "$TARGET_OVERLAY" ]; then
@@ -150,7 +150,7 @@ find build/ -name "libEGL.so*" -exec cp -fv {} ./pack_flat/libEGL.so.1 \; -exec 
 find build/ -name "libGL.so*" -exec cp -fv {} ./pack_flat/libGL.so.1 \; -exec cp -fv {} ./pack_flat/libGL.so \; -exec cp -fv {} ./pack_usr/usr/lib/libGL.so.1 \; -exec cp -fv {} ./pack_usr/system/lib64/libGL.so \; 2>/dev/null || true
 find build/ -name "libglapi.so*" -exec cp -fv {} ./pack_flat/libglapi.so.0 \; -exec cp -fv {} ./pack_flat/libglapi.so \; -exec cp -fv {} ./pack_usr/usr/lib/libglapi.so.0 \; 2>/dev/null || true
 
-# SINCRO 1: METADATOS JSON PARA BANNERLATOR (ZIP PLANO)
+# METADATOS JSON SINCRONIZADOS AL NOMBRE UNIFICADO:
 cat << 'EOF' > ./pack_flat/meta.json
 {
   "schemaVersion": 1,
@@ -160,36 +160,27 @@ cat << 'EOF' > ./pack_flat/meta.json
   "packageVersion": "26.3",
   "vendor": "Mesa",
   "driverVersion": "1",
-  "libraryName": "libvulkan_wrapper.so"
+  "libraryName": "libvulkan_panfrost.so"
 }
 EOF
 
-# SINCRO 2: MANIFIESTO ICD COMPLETO UNIFICADO PARA EL PACK TAR.ZST:
-cat << 'EOF' > ./pack_flat/libvulkan_wrapper.json
+# 🟢 LA ESTOCADA MAESTRA DEL MANIFIESTO NATIVO RELATIVO:
+cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/panfrost_icd.aarch64.json
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "library_path": "libvulkan_wrapper.so",
+    "library_path": "libvulkan_panfrost.so",
     "api_version": "1.3.289"
   }
 }
 EOF
 
-cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
-{
-  "file_format_version": "1.0.0",
-  "ICD": {
-    "library_path": "libvulkan_wrapper.so",
-    "api_version": "1.3.289"
-  }
-}
-EOF
-
+# AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
 echo "Mesa Over-cmd v26.3-Bifrost Gamenative Core" > ./pack_flat/version.txt
 echo "Mesa Over-cmd v26.3-Bifrost Gamenative Core" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
-chmod 644 ./pack_flat/*.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
+chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
 
 # Ensamblamos tus estructuras duales definitivas completas
 cd pack_flat
