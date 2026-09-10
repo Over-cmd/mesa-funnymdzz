@@ -2,32 +2,12 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. DESCARGA Y SOLDADURA BIÓNICA DE GAMENATIVE WRAPPER"
+echo "🧬 1. SANEAMIENTO DIRECTO Y HORNEADO DOBLE DE ARCHIVOS SHIMS"
 echo "========================================================="
 mkdir -p shims
 mkdir -p shims/lib
 
-# 🟢 RECOLECTOR CRUZADO MEDIANTE ENLACE DIRECTO BLINDADO:
-DOMINIO_GIT="https://github.com"
-USUARIO_FORK="Over-cmd"
-PROYECTO_WRAP="gamenative-wrapper.git"
-
-echo "-> Uniendo inodos de red en caliente..."
-URL_COMPLETA="${DOMINIO_GIT}/${USUARIO_FORK}/${PROYECTO_WRAP}"
-
-rm -rf gamenative-temp
-git clone --depth 1 --branch wrapper-25 "https://github.com/Over-cmd/gamenative-wrapper.git" gamenative-temp
-
-echo "-> Ejecutando cirugías automáticas de patch_mesa.sh..."
-cp -fv gamenative-temp/patch_mesa.sh ./ || true
-mkdir -p src/vulkan/wrapper
-cp -rf gamenative-temp/src/vulkan/wrapper/* src/vulkan/wrapper/ || true
-rm -rf gamenative-temp
-
-chmod +x patch_mesa.sh
-./patch_mesa.sh || echo "-> Parche integrado en la matriz de construcción."
-
-# El doble horneador de binarios físicos reales de X11 en caliente
+# El doble horneador de binarios físicos reales de X11 en caliente para evitar baches
 cat << 'EOF' > dummy_x11.c
 void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
@@ -65,16 +45,17 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 JUGADA MAESTRA SUPREMA: INYECCIÓN DIRECTA EN EL NÚCLEO UNIVERSAL DEL DRIVER:
-# Limpiamos parches flotantes anteriores para evitar basura sintáctica
+# 🟢 INYECCIÓN MAESTRA SUPREMA: DIRECTA EN EL NÚCLEO UNIVERSAL DEL DRIVER (v359):
+# Limpiamos parches de instancias anteriores para dejar el archivo privado impecable
 TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
 if [ -f "$TARGET_PRIVATE" ]; then rm -f "$TARGET_PRIVATE"; git checkout -- "$TARGET_PRIVATE" || true; fi
 
 TARGET_CORE="src/vulkan/runtime/vk_instance.c"
 if [ -f "$TARGET_CORE" ]; then
     echo "-> Realizando inyección a nivel de núcleo en: $TARGET_CORE"
-    # Buscamos la función de inicialización del runtime vk_instance_init e inyectamos 
-    # el bypass nativo de Mesa en su primera línea de ejecución real.
+    sed -i '/setenv/d' "$TARGET_CORE"
+    
+    # Inyectamos el bypass nativo de Mesa en la primera línea de ejecución real
     sed -i '/vk_instance_init(/,/{/ { /{/a \
         setenv("PAN_MESA_DEBUG", "kbase,sync", 1); \
         setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
