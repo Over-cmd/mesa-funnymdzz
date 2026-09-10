@@ -7,7 +7,11 @@ echo "========================================================="
 mkdir -p shims
 mkdir -p shims/lib
 
-# El doble horneador de binarios físicos reales de X11 en caliente para evitar baches
+# 🟢 ¡AQUÍ ESTÁ TU ESCUDO ESPEJO INDESTRUCTIBLE!
+mkdir -p shims/src/util/u_gralloc
+touch shims/src/util/u_gralloc/force_aosp_abi.h
+
+# El doble horneador de binarios físicos reales de X11 en caliente
 cat << 'EOF' > dummy_x11.c
 void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
