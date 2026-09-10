@@ -7,22 +7,27 @@ echo "========================================================="
 mkdir -p shims
 mkdir -p shims/lib
 
+# 🟢 RECOLECTOR CRUZADO MEDIANTE ENLACE DIRECTO BLINDADO:
+DOMINIO_GIT="https://github.com"
+USUARIO_FORK="Over-cmd"
+PROYECTO_WRAP="gamenative-wrapper.git"
+
+echo "-> Uniendo inodos de red en caliente..."
+URL_COMPLETA="${DOMINIO_GIT}/${USUARIO_FORK}/${PROYECTO_WRAP}"
+
 rm -rf gamenative-temp
-echo "-> Clonando tu rama wrapper-25 mediante enlace blindado directo..."
 git clone --depth 1 --branch wrapper-25 "https://github.com/Over-cmd/gamenative-wrapper.git" gamenative-temp
 
 echo "-> Ejecutando cirugías automáticas de patch_mesa.sh..."
-# Extraemos el parche maestro de tu repositorio y la suite de virtualización de texturas
 cp -fv gamenative-temp/patch_mesa.sh ./ || true
 mkdir -p src/vulkan/wrapper
 cp -rf gamenative-temp/src/vulkan/wrapper/* src/vulkan/wrapper/ || true
 rm -rf gamenative-temp
 
-# Detonamos el script original para que modifique los meson.build del core de forma legal
 chmod +x patch_mesa.sh
 ./patch_mesa.sh || echo "-> Parche integrado en la matriz de construcción."
 
-# El doble horneador de binarios físicos reales de X11 en caliente para evitar baches
+# El doble horneador de binarios físicos reales de X11 en caliente
 cat << 'EOF' > dummy_x11.c
 void* XOpenDisplay(const char* display_name) { return 0; }
 int XCloseDisplay(void* display) { return 0; }
@@ -60,27 +65,24 @@ if [ -f "meson.build" ]; then
     done
 fi
 
-# 🟢 INYECCIÓN DEL ESCUDO NATIVO DE CONFIGURACIÓN MESA EN CABECERAS:
+# 🟢 JUGADA MAESTRA SUPREMA: INYECCIÓN DIRECTA EN EL NÚCLEO UNIVERSAL DEL DRIVER:
+# Limpiamos parches flotantes anteriores para evitar basura sintáctica
 TARGET_PRIVATE="src/panfrost/vulkan/panvk_private.h"
-if [ -f "$TARGET_PRIVATE" ]; then
-    echo "-> Inyectando Escudo de Control Oficial de Mesa en: $TARGET_PRIVATE"
-    if [ -f "src/panfrost/vulkan/panvk_instance.c" ]; then
-        sed -i '/setenv/d' "src/panfrost/vulkan/panvk_instance.c"
-    fi
-    
-    cat << 'EOF' > patch_header.h
-#include <stdlib.h>
-__attribute__((constructor)) static void panvk_native_mesa_bypass_init() {
-    setenv("PAN_MESA_DEBUG", "kbase,sync", 1);
-    setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1);
-    setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1);
-    setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1);
-    setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1);
-    setenv("MESA_VK_WSI_DEBUG", "always", 1);
-}
-EOF
-    cat "$TARGET_PRIVATE" >> patch_header.h
-    mv -f patch_header.h "$TARGET_PRIVATE"
+if [ -f "$TARGET_PRIVATE" ]; then rm -f "$TARGET_PRIVATE"; git checkout -- "$TARGET_PRIVATE" || true; fi
+
+TARGET_CORE="src/vulkan/runtime/vk_instance.c"
+if [ -f "$TARGET_CORE" ]; then
+    echo "-> Realizando inyección a nivel de núcleo en: $TARGET_CORE"
+    # Buscamos la función de inicialización del runtime vk_instance_init e inyectamos 
+    # el bypass nativo de Mesa en su primera línea de ejecución real.
+    sed -i '/vk_instance_init(/,/{/ { /{/a \
+        setenv("PAN_MESA_DEBUG", "kbase,sync", 1); \
+        setenv("PAN_EXPERIMENTAL_KBASE_GL", "1", 1); \
+        setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); \
+        setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1); \
+        setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1); \
+        setenv("MESA_VK_WSI_DEBUG", "always", 1);
+    }' "$TARGET_CORE"
 fi
 
 echo "========================================================="
@@ -198,8 +200,8 @@ cat << 'EOF' > ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 EOF
 
 # AGREGAMOS EL ARCHIVO VERSION.TXT EXIGIDO POR EL EMULADOR:
-echo "Mesa Over-cmd v26.3-Bifrost Gamenative NAtivo" > ./pack_flat/version.txt
-echo "Mesa Over-cmd v26.3-Bifrost Gamenative NAtivo" > ./pack_usr/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Gamenative Core" > ./pack_flat/version.txt
+echo "Mesa Over-cmd v26.3-Bifrost Gamenative Core" > ./pack_usr/version.txt
 
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/meta.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
