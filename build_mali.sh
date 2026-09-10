@@ -64,6 +64,8 @@ export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgco
 
 envsubst < android.toml > android-cross.txt
 
+sed -i "s|c_args = \[|c_args = \['-I\$GITHUB_WORKSPACE/shims', |g" android-cross.txt; sed -i "s|cpp_args = \[|cpp_args = \['-I\$GITHUB_WORKSPACE/shims', |g" android-cross.txt
+
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
     -Ddefault_library=both \
     -Dbuildtype=debugoptimized \
