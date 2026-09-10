@@ -2,16 +2,8 @@
 set -e
 
 echo "========================================================="
-echo "🧬 1. SANEAMIENTO BIÓNICO DE GRALLOC ABI Y ARCHIVOS SHIMS"
+echo "🧬 1. SANEAMIENTO DIRECTO Y HORNEADO DOBLE DE ARCHIVOS SHIMS"
 echo "========================================================="
-# 🟢 ESCUDO ANULADOR DE ERROR DE CABECERA FANTASMA:
-# Creamos físicamente la estructura de carpetas y el fichero force_aosp_abi.h vacío.
-# Esto engaña al Sanity Check de Clang++ en frío, evitando el fallo de 'file not found'
-# y permitiendo que Meson setup pase limpio como una patena sin colapsar.
-mkdir -p src/util/u_gralloc
-touch src/util/u_gralloc/force_aosp_abi.h
-echo "-> Escudo térmico force_aosp_abi.h inyectado con éxito en el árbol."
-
 mkdir -p shims
 mkdir -p shims/lib
 
@@ -66,8 +58,7 @@ if [ -f "$TARGET_CORE" ]; then
         setenv("MESA_LOADER_DRIVER_OVERRIDE", "panfrost", 1); \
         setenv("MESA_VK_IGNORE_CONFORMANCE_WARNING", "1", 1); \
         setenv("MESA_VK_WSI_PRESENT_MODE", "immediate", 1); \
-        setenv("MESA_VK_WSI_DEBUG", "always", 1);
-    }' "$TARGET_CORE"
+        setenv("MESA_VK_WSI_DEBUG", "always", 1);' "$TARGET_CORE"
 fi
 
 echo "========================================================="
@@ -80,9 +71,6 @@ export PKG_CONFIG_FOR_BUILD="/usr/bin/pkg-config"
 export PKG_CONFIG_PATH_FOR_BUILD="/usr/lib/x86_64-linux-gnu/pkgconfig"
 export PKG_CONFIG_PATH="$ANDROID_NDK_LATEST_HOME/prebuilt/linux-x86_64/lib/pkgconfig"
 
-# 🟢 SANEAMIENTO EXTRA DE BANDERAS PARÁSITAS:
-# Limpiamos el cross-file en caliente para asegurarnos de que ninguna orden de include 
-# rota ensucie el chequeo del compilador de Android NDK.
 envsubst < android.toml > android-cross.txt
 
 meson setup build --reconfigure --cross-file android-cross.txt --wrap-mode=forcefallback \
@@ -141,7 +129,7 @@ mkdir -p ./pack_usr/usr/share/vulkan/icd.d
 mkdir -p ./pack_usr/vendor/lib64/hw
 mkdir -p ./pack_usr/system/lib64
 
-# UNIFICACIÓN DE NOMBRE REAL: Guardamos todo como libvulkan_panfrost.so de principio a fin
+# 🟢 UNIFICACIÓN DE NOMBRE REAL: Guardamos todo como libvulkan_panfrost.so de principio a fin
 cp -fv "$TARGET_VULKAN" ./pack_flat/libvulkan_panfrost.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/usr/lib/libvulkan_panfrost.so
 cp -fv "$TARGET_VULKAN" ./pack_usr/vendor/lib64/hw/libvulkan_panfrost.so
@@ -176,7 +164,8 @@ cat << 'EOF' > ./pack_flat/meta.json
 }
 EOF
 
-# SELLO REINA DE 64 BITS SANEADO:
+# 🟢 CONFIGURACIÓN MAESTRA DE FILTRADO AARCH64:
+# Creamos físicamente el manifiesto con la extensión exacta exigida por el cargador
 cat << 'EOF' > ./pack_flat/libvulkan_panfrost.aarch64.json
 {
   "file_format_version": "1.0.0",
@@ -186,11 +175,12 @@ cat << 'EOF' > ./pack_flat/libvulkan_panfrost.aarch64.json
   }
 }
 EOF
+
+# Multiplicamos los duplicados cruzados redundantes para forzar el enlazado en Winlator/Bannerlator
 cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_flat/wrapper_icd.aarch64.json
 cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_flat/libvulkan_panfrost.json
 
-# Duplicamos la matriz exacta dentro de las mangueras internas del TAR.ZST
-mkdir -p ./pack_usr/usr/share/vulkan/icd.d
+# Rematamos el árbol del paquete estructurado TAR.ZST para el ContainerManager.java
 cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_usr/usr/share/vulkan/icd.d/libvulkan_panfrost.aarch64.json
 cp -fv ./pack_flat/libvulkan_panfrost.aarch64.json ./pack_usr/usr/share/vulkan/icd.d/wrapper_icd.aarch64.json
 
@@ -200,7 +190,7 @@ echo "Mesa Over-cmd v26.3-Bifrost Panfrost AArch64" > ./pack_usr/version.txt
 chmod 755 ./pack_flat/*.so* ./pack_usr/usr/lib/*.so* ./pack_usr/vendor/lib64/hw/*.so* 2>/dev/null || true
 chmod 644 ./pack_flat/*.json ./pack_flat/version.txt ./pack_usr/version.txt ./pack_usr/usr/share/vulkan/icd.d/*.json
 
-# Ensamblamos tus estructuras duales definitivas completas
+# Ensamblamos tus dos mangueras de salida duales
 cd pack_flat
 zip -r ../panvk-bannerlator-driver.zip ./*
 cd ..
